@@ -1,0 +1,12 @@
+# ~/.graphify/graphifyignore — OPTIONAL global ignore (general-purpose).
+# Read by patch-global-ignore.py as the OUTERMOST (lowest-priority) layer for
+# EVERY project, without shadowing per-repo .gitignore/.graphifyignore.
+#
+# Media (img/video/audio/pdf/office) is NOT handled here anymore — it's a clean
+# toggle: `touch ~/.graphify/no-media` (or GRAPHIFY_NO_MEDIA=1) via patch-no-media.py.
+# Keeping media out of this file means the toggle can also turn media back ON.
+#
+# Secrets (.env, *.pem, *.key, id_rsa, credentials, *token*/*secret* ...) are
+# skipped by graphify's built-in _is_sensitive in every project regardless.
+#
+# Add your own global glob excludes below if ever needed (empty by default):

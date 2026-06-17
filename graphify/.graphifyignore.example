@@ -1,0 +1,27 @@
+# .graphifyignore.example — per-project ignore template.
+#
+# YOU PROBABLY DON'T NEED THIS. Media (img/video/audio/pdf/office) is already
+# excluded in EVERY project by the GLOBAL ignore (~/.graphify/graphifyignore +
+# patch-global-ignore.py). Secrets/.env are skipped built-in everywhere.
+#
+# Use a per-project .graphifyignore ONLY for project-specific excludes the global
+# layer and .gitignore don't already cover.
+#
+# ⚠️ FOOTGUN (verified): a .graphifyignore in a directory makes graphify STOP
+# reading that directory's .gitignore (it does NOT merge — last-match-wins per
+# file, but .gitignore is shadowed entirely when .graphifyignore exists in the
+# same dir). So if you add one, COPY OVER any non-secret .gitignore rules you
+# still need (build dirs, data dumps, etc.). Secrets stay safe regardless (built-in).
+#
+# gitignore syntax: glob patterns, last-match-wins, `!` re-includes.
+
+# example: carry over the project's own .gitignore rules that aren't secrets
+# (secrets like .env are already handled built-in, no need to list them):
+# build/
+# dist/
+# node_modules/
+# db-backups/
+
+# example: project-specific extra excludes
+# vendor/
+# *.generated.ts

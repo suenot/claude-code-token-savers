@@ -1,0 +1,12 @@
+{
+  "openrouter": {
+    "base_url": "https://openrouter.ai/api/v1",
+    "default_model": "deepseek/deepseek-v4-flash",
+    "env_key": "OPENROUTER_API_KEY",
+    "model_env_key": "GRAPHIFY_OPENROUTER_MODEL",
+    "pricing": { "input": 0.09, "output": 0.18 },
+    "temperature": 0,
+    "max_tokens": 16384,
+    "vision": false
+  }
+}

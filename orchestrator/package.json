@@ -1,0 +1,9 @@
+{
+  "name": "shuba",
+  "version": "0.1.0",
+  "type": "module",
+  "bin": { "shuba": "./bin/shuba.js" },
+  "engines": { "node": ">=18" },
+  "scripts": { "test": "node --test" },
+  "license": "MIT"
+}

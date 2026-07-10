@@ -40,18 +40,28 @@ async function doRun(argv) {
     return 1;
   }
   const handle = await up(result.chain);
-  let apiKey;
-  if (result.head.requiresToken) {
-    apiKey = await mintToken(routerRootFromChain(result.chain));
-  }
-  console.error('shuba: chain up →', result.chain.map((s) => `${s.id}:${s.port}`).join(' → '));
-  const child = runClaude(result.head, { apiKey, claudeArgs: splitClaudeArgs(argv) });
-  return await new Promise((resolve) => {
-    child.on('exit', async (code) => {
-      await handle.down();
-      resolve(code ?? 0);
+  try {
+    let apiKey;
+    if (result.head.requiresToken) {
+      apiKey = await mintToken(routerRootFromChain(result.chain));
+    }
+    console.error('shuba: chain up →', result.chain.map((s) => `${s.id}:${s.port}`).join(' → '));
+    const child = runClaude(result.head, { apiKey, claudeArgs: splitClaudeArgs(argv) });
+    return await new Promise((resolve) => {
+      child.on('exit', async (code) => {
+        await handle.down();
+        resolve(code ?? 0);
+      });
+      child.on('error', async (err) => {
+        console.error('shuba: failed to launch claude:', err.message);
+        await handle.down();
+        resolve(1);
+      });
     });
-  });
+  } catch (err) {
+    await handle.down();
+    throw err;
+  }
 }
 
 async function doUp() {
@@ -112,6 +122,6 @@ export async function cli(argv) {
     console.log('shuba: v1 keeps the chain tied to the foreground `run`/`up` process; stop that process to tear down.');
     return 0;
   }
-  console.error(`shuba: unknown command "${cmd}" — run | up | status | doctor`);
+  console.error(`shuba: unknown command "${cmd}" — run | up | status | doctor | down`);
   return 1;
 }

@@ -20,6 +20,10 @@ complementary way:
   source-verified but has not yet been live smoke-tested end-to-end (only the
   default anthropic+headroom chain was) — treat any `terminal != "anthropic"`
   chain as experimental for now.
+- **compact-router** — a built-in stage (no external binary) that reroutes
+  just Claude Code's `/compact`/autocompact summarization request to a cheap
+  model, leaving every other request untouched. See
+  [below](#compact-router) for details.
 
 Run bare, only one of them can sit behind `ANTHROPIC_BASE_URL`. **shuba**
 starts the proxies you've enabled, each on its own port, wires each one's
@@ -78,8 +82,12 @@ the exact install command for each.
 
 - **`terminal`** — where the chain ends up talking:
   `anthropic | codex | gemini | qwen | openai-compatible`.
-- **`compressors`** — subset of `["headroom", "pxpipe"]`, in chain order
-  (first entry = closest to Claude Code, i.e. it sees the request first).
+- **`compressors`** — subset of `["headroom", "pxpipe", "compact-router"]`, in
+  chain order (first entry = closest to Claude Code, i.e. it sees the request
+  first). `compact-router` is recommended **first** — see
+  [below](#compact-router).
+- **`compactRouter`** — optional config block for the `compact-router` stage
+  (model/baseUrl/envKey); see [below](#compact-router).
 - **`ports`** — optional per-proxy port overrides (`{ "pxpipe": 47821,
   "headroom": 8787, "router": 8080 }`); registry defaults are used otherwise.
 
@@ -90,6 +98,80 @@ so.
 The **router is not listed under `compressors`** — it is auto-appended as the
 terminal stage whenever `terminal != "anthropic"`, with `UPSTREAM_PROVIDER`
 set to match.
+
+## compact-router
+
+**compact-router** is a built-in shuba stage — it spawns our own Node module
+(`orchestrator/bin/compact-interceptor.js`) instead of an external binary, but
+otherwise flows through the same supervisor/planner as any other compressor.
+
+### What it does
+
+Claude Code's `/compact` (and autocompact) is a normal `POST /v1/messages`
+call to the **session model** that reads the entire accumulated context and
+writes a summary. compact-router fingerprints that one request — the **last
+user turn** contains the verbatim, distinctive text `create a detailed
+summary of the conversation so far` (case-insensitive; the same fingerprint
+covers both manual `/compact` and autocompact) — and serves it from a cheap
+OpenAI-compatible model instead, translating Anthropic⇄OpenAI both ways.
+Every other request passes through untouched to the next stage. It never
+touches the main session's cache: only the one summarization request is
+intercepted, everything else still flows to the flagship unchanged.
+
+### Why it saves money
+
+Compaction reads the *whole* context on the flagship — on a full Fable 1M
+session that costs roughly **$1.5 (cache-warm) to $10–13 (cache-cold) per
+compaction**, and autocompact recurs over a long session. It's a pure
+"re-read and condense" task that barely benefits from the prompt cache, so
+rerouting just that one request to a cheap model is near-pure savings.
+
+### Config
+
+Add `"compact-router"` to `compressors` — **recommended first**, closest to
+Claude Code, so the compact request is caught before other stages waste work
+imaging/compressing it (the match works from any position, this is just the
+efficient one). An optional `compactRouter` block tunes the model:
+
+```json
+{
+  "terminal": "anthropic",
+  "compressors": ["compact-router", "headroom"],
+  "compactRouter": {
+    "model": "deepseek/deepseek-v4-flash",
+    "baseUrl": "https://openrouter.ai/api/v1",
+    "envKey": "OPENROUTER_API_KEY"
+  },
+  "ports": {}
+}
+```
+
+Defaults (used when `compactRouter` is omitted, or any of its fields are):
+`deepseek/deepseek-v4-flash` via OpenRouter, using the `OPENROUTER_API_KEY`
+environment variable.
+
+### The fallback guarantee
+
+On **any** external-model failure (network error, non-2xx, empty content,
+timeout) the request falls back to transparent passthrough to the flagship —
+`/compact` never breaks, you just pay the normal price that one time. The
+same applies if the request doesn't match the fingerprint at all: straight
+passthrough, no translation involved.
+
+### Quality caveat
+
+A cheap model makes a rougher summary than the flagship would — watch for
+context-rot if summaries start dropping details you needed. If that happens,
+raise the model in `compactRouter.model` (any OpenAI-compatible model behind
+the same `baseUrl`/`envKey` works).
+
+### Coming later: context-watchdog (Phase 2)
+
+Planned, not yet built: a `context-watchdog` stage that proactively compacts
+the session **before** Claude Code's own autocompact kicks in, once the
+request's estimated token count crosses a configurable threshold (default
+**300,000**), summarizing older turns via the same cheap-model path while
+keeping a live recent tail verbatim.
 
 ## Commands
 

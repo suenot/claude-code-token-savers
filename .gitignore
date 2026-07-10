@@ -3,3 +3,4 @@ graphify-out/
 *.bak
 __pycache__/
 .graphify-auto
+temp/

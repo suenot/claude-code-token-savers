@@ -58,3 +58,11 @@ test('REJECT empty chain (no compressors, anthropic terminal → nothing to run)
   assert.equal(r.ok, false);
   assert.match(r.errors.join('\n'), /nothing to run|empty/i);
 });
+
+test('terminal router stage has no upstreamBase (uses provider, not a URL)', () => {
+  const r = plan({ terminal: 'codex', compressors: [] });
+  assert.equal(r.ok, true);
+  assert.equal(r.chain[0].id, 'router');
+  assert.equal(r.chain[0].upstreamBase, undefined);
+  assert.equal(r.chain[0].provider, 'codex');
+});

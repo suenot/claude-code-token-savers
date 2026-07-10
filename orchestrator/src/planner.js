@@ -45,8 +45,8 @@ export function plan(config, registry = REGISTRY) {
   // takes provider instead of an upstreamBase.
   const chain = staged.map((s, i) => {
     const next = staged[i + 1];
-    const upstreamBase = next ? next.baseUrl : ANTHROPIC_UPSTREAM;
     const provider = s.d.terminal && terminal !== 'anthropic' ? terminal : undefined;
+    const upstreamBase = next ? next.baseUrl : (provider ? undefined : ANTHROPIC_UPSTREAM);
     const { args, env } = s.d.build({ port: s.port, upstreamBase, provider });
     return {
       id: s.id,

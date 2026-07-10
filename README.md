@@ -14,6 +14,13 @@ Five tools, every layer of the token bill:
 
 Companion to the write-up: **[Saving tokens in LLMs — a practical Claude Code guide](https://www.suenot.com/blog/saving-tokens-llm/)**.
 
+**shuba** (this repo, [`orchestrator/`](orchestrator/)) is the piece that ties pxpipe, headroom, and
+link-assistant/router together: only one process can own `ANTHROPIC_BASE_URL`
+at a time, so shuba starts the proxies you enable each on its own port, wires
+each one's upstream to the next, and launches `claude` against the head of
+the chain — so the proxies layer instead of fighting over the slot. See
+[`orchestrator/README.md`](orchestrator/README.md).
+
 ---
 
 ## 1. rtk — compress command output

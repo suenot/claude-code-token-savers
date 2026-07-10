@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { waitForHealth } from '../src/supervisor.js';
+import { waitForHealth, up } from '../src/supervisor.js';
 
 test('waitForHealth resolves once fetch returns ok', async () => {
   let calls = 0;
@@ -29,4 +29,22 @@ test('waitForHealth rejects after timeout', async () => {
     }),
     /timed out|health/i,
   );
+});
+
+test('up tears down already-started stages in reverse order on health failure, and down() is idempotent', async () => {
+  const killed = [];
+  const makeChild = (id) => ({ pid: id, kill: () => killed.push(id) });
+  const children = { s1: makeChild('s1'), s2: makeChild('s2') };
+  const spawnImpl = (bin) => children[bin];
+  // s1 healthy, s2 never healthy -> up should fail and tear down s2 then s1
+  const fetchImpl = async (url) => ({ ok: url.includes('1') });
+  const chain = [
+    { id: 's1', port: 1, healthUrl: 'http://x/1', spawn: { bin: 's1', args: [], env: {} } },
+    { id: 's2', port: 2, healthUrl: 'http://x/2', spawn: { bin: 's2', args: [], env: {} } },
+  ];
+  await assert.rejects(
+    up(chain, { spawnImpl, fetchImpl, healthOpts: { timeoutMs: 20, intervalMs: 1 } }),
+    /health|timed out/i,
+  );
+  assert.deepEqual(killed, ['s2', 's1']);
 });

@@ -21,10 +21,10 @@ export async function waitForHealth(
   }
 }
 
-export async function up(chain, { spawnImpl = spawn, fetchImpl = fetch } = {}) {
+export async function up(chain, { spawnImpl = spawn, fetchImpl = fetch, healthOpts = {} } = {}) {
   const started = [];
   const down = async () => {
-    for (const s of started.reverse()) {
+    for (const s of [...started].reverse()) {
       try {
         s.child.kill('SIGTERM');
       } catch {
@@ -39,7 +39,7 @@ export async function up(chain, { spawnImpl = spawn, fetchImpl = fetch } = {}) {
         stdio: ['ignore', 'inherit', 'inherit'],
       });
       started.push({ id: stage.id, port: stage.port, child });
-      await waitForHealth(stage.healthUrl, { fetchImpl });
+      await waitForHealth(stage.healthUrl, { ...healthOpts, fetchImpl });
     }
   } catch (err) {
     await down();

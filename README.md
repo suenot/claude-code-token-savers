@@ -86,7 +86,7 @@ Dashboard at <http://127.0.0.1:47821/>: tokens saved, every text→image convers
 headroom compresses everything the agent *reads* — tool outputs, logs, RAG chunks, files, conversation history — with a content router that picks the right compressor per type (JSON, AST/code, prose) and caches originals for reversible retrieval. 60–95% on JSON payloads, ~15–20% on coding-agent traffic. Local-first; your data never leaves the machine.
 
 ```bash
-uv tool install headroom-ai    # or: pip install headroom-ai
+uv tool install "headroom-ai[proxy]"    # [proxy] extra required for `headroom proxy`; or: pip install headroom-ai
 headroom wrap claude           # one-command Claude Code integration
 # undo with: headroom unwrap claude
 ```

@@ -31,6 +31,14 @@ export function plan(config, registry = REGISTRY) {
   if (orderIds.length === 0) {
     errors.push('nothing to run — an anthropic terminal with no compressors is an empty chain');
   }
+
+  // Duplicate compressor ids.
+  const seen = new Set();
+  for (const id of compressors) {
+    if (seen.has(id)) errors.push(`duplicate compressor id "${id}" — each compressor may appear at most once`);
+    seen.add(id);
+  }
+
   if (errors.length) return { ok: false, errors };
 
   // Assign ports and precompute each stage's baseUrl.
@@ -39,6 +47,20 @@ export function plan(config, registry = REGISTRY) {
     const port = ports[id] ?? d.defaultPort;
     return { d, id, port, baseUrl: baseUrlFor(d, port) };
   });
+
+  // Port collisions: two stages resolving to the same port.
+  const portOwners = new Map();
+  for (const s of staged) {
+    if (!portOwners.has(s.port)) portOwners.set(s.port, []);
+    portOwners.get(s.port).push(s.id);
+  }
+  for (const [port, ids] of portOwners) {
+    if (ids.length > 1) {
+      errors.push(`port collision on ${port}: ${ids.join(', ')} all resolve to the same port`);
+    }
+  }
+
+  if (errors.length) return { ok: false, errors };
 
   // Wire upstreams: each stage forwards to the next stage's baseUrl; the terminal
   // anthropic stage forwards to the real Anthropic API. The router is terminal and

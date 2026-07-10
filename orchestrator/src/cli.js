@@ -11,7 +11,7 @@ import { REGISTRY } from './registry.js';
 const INSTALL_HINT = {
   pxpipe: 'npm i -g pxpipe-proxy',
   headroom: 'uv tool install "headroom-ai[proxy]"',
-  router: 'cargo install link-assistant-router  (or: docker pull konard/link-assistant-router)',
+  router: 'cargo install link-assistant-router  (or: docker pull konard/link-assistant-router — repo: https://github.com/link-assistant/router)',
 };
 
 function version() {
@@ -48,14 +48,20 @@ async function doRun(argv) {
     console.error('shuba: chain up →', result.chain.map((s) => `${s.id}:${s.port}`).join(' → '));
     const child = runClaude(result.head, { apiKey, claudeArgs: splitClaudeArgs(argv) });
     return await new Promise((resolve) => {
-      child.on('exit', async (code) => {
+      let settled = false;
+      const finish = async (code) => {
+        if (settled) return;
+        settled = true;
         await handle.down();
         resolve(code ?? 0);
-      });
-      child.on('error', async (err) => {
+      };
+      for (const sig of ['SIGINT', 'SIGTERM']) {
+        process.on(sig, () => finish(0));
+      }
+      child.on('exit', (code) => finish(code));
+      child.on('error', (err) => {
         console.error('shuba: failed to launch claude:', err.message);
-        await handle.down();
-        resolve(1);
+        finish(1);
       });
     });
   } catch (err) {
@@ -74,10 +80,12 @@ async function doUp() {
   const handle = await up(result.chain);
   console.error('shuba: chain up:', JSON.stringify(handle.status()));
   console.error('shuba: Ctrl-C to tear down.');
-  process.on('SIGINT', async () => {
-    await handle.down();
-    process.exit(0);
-  });
+  for (const sig of ['SIGINT', 'SIGTERM']) {
+    process.on(sig, async () => {
+      await handle.down();
+      process.exit(0);
+    });
+  }
   await new Promise(() => {}); // run until signal
   return 0;
 }

@@ -14,9 +14,12 @@ complementary way:
   parts of a request (system prompt, tool docs, old history) to dense PNGs.
 - **[headroom](https://headroom-docs.vercel.app/docs)** — content-aware
   compression of request content (JSON, code, prose).
-- **[link-assistant/router](https://github.com/konard/link-assistant-router)**
+- **[link-assistant/router](https://github.com/link-assistant/router)**
   — translates the Anthropic Messages API to another provider (Codex, Gemini,
-  Qwen, or an OpenAI-compatible endpoint).
+  Qwen, or an OpenAI-compatible endpoint). The router stage's interface is
+  source-verified but has not yet been live smoke-tested end-to-end (only the
+  default anthropic+headroom chain was) — treat any `terminal != "anthropic"`
+  chain as experimental for now.
 
 Run bare, only one of them can sit behind `ANTHROPIC_BASE_URL`. **shuba**
 starts the proxies you've enabled, each on its own port, wires each one's
@@ -55,7 +58,7 @@ installed separately — shuba does not vendor or auto-install them:
 npm i -g pxpipe-proxy                    # pxpipe
 uv tool install "headroom-ai[proxy]"     # headroom — the [proxy] extra is REQUIRED
                                           # to get the `headroom proxy` subcommand
-# router: see https://github.com/konard/link-assistant-router
+# router: see https://github.com/link-assistant/router
 #   cargo install link-assistant-router
 #   or: docker pull konard/link-assistant-router
 ```

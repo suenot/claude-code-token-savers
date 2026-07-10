@@ -66,3 +66,14 @@ test('terminal router stage has no upstreamBase (uses provider, not a URL)', () 
   assert.equal(r.chain[0].upstreamBase, undefined);
   assert.equal(r.chain[0].provider, 'codex');
 });
+
+test('REJECT duplicate compressor', () => {
+  const r = plan({ terminal: 'anthropic', compressors: ['headroom', 'headroom'] });
+  assert.equal(r.ok, false);
+  assert.match(r.errors.join('\n'), /duplicate|headroom/i);
+});
+test('REJECT port collision', () => {
+  const r = plan({ terminal: 'codex', compressors: ['headroom'], ports: { headroom: 8080, router: 8080 } });
+  assert.equal(r.ok, false);
+  assert.match(r.errors.join('\n'), /8080|port/i);
+});

@@ -10,7 +10,7 @@ import { REGISTRY } from './registry.js';
 
 const INSTALL_HINT = {
   pxpipe: 'npm i -g pxpipe-proxy',
-  headroom: 'uv tool install headroom-ai',
+  headroom: 'uv tool install "headroom-ai[proxy]"',
   router: 'cargo install link-assistant-router  (or: docker pull konard/link-assistant-router)',
 };
 

@@ -17,7 +17,7 @@ export const REGISTRY = {
     defaultPort: 8787,
     dialect: 'anthropic',
     terminal: false,
-    healthPath: '/stats',
+    healthPath: '/health',
     build({ port, upstreamBase }) {
       return {
         args: ['proxy', '--port', String(port)],

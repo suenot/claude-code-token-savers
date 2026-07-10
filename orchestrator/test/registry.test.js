@@ -15,7 +15,7 @@ test('pxpipe descriptor wires PORT and ANTHROPIC_UPSTREAM', () => {
 
 test('headroom descriptor wires --port and ANTHROPIC_TARGET_API_URL', () => {
   const d = REGISTRY.headroom;
-  assert.equal(d.healthPath, '/stats');
+  assert.equal(d.healthPath, '/health');
   const { args, env } = d.build({ port: 8787, upstreamBase: 'https://api.anthropic.com' });
   assert.deepEqual(args, ['proxy', '--port', '8787']);
   assert.equal(env.ANTHROPIC_TARGET_API_URL, 'https://api.anthropic.com');

@@ -43,7 +43,7 @@ export function openAIMessageToAnthropic(text, { model, inputTokens = 0, outputT
 }
 
 function frame(type, obj) {
-  return `event: ${type}\n\ndata: ${JSON.stringify({ type, ...obj })}\n\n`;
+  return `event: ${type}\ndata: ${JSON.stringify({ type, ...obj })}\n\n`;
 }
 
 export function anthropicSSEChunks(text, { model }) {

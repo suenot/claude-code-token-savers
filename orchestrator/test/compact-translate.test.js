@@ -53,5 +53,10 @@ test('anthropicSSEChunks: ordered frames carrying the text', () => {
   ]);
   assert.match(frames[2], /"text_delta"/);
   assert.match(frames[2], /hello/);
-  for (const f of frames) assert.match(f, /\n\ndata: .*\n\n$/s);
+  for (const f of frames) assert.match(f, /^event: \S+\ndata: .+\n\n$/s);
+});
+
+test('anthropicToOpenAI: max_tokens default and under-cap passthrough', () => {
+  assert.equal(anthropicToOpenAI({ messages: [] }, 'm').max_tokens, 8192); // default
+  assert.equal(anthropicToOpenAI({ messages: [], max_tokens: 5000 }, 'm').max_tokens, 5000); // under cap unchanged
 });

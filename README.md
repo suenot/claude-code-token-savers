@@ -2,13 +2,15 @@
 
 A ready-made, **global** Claude Code setup to cut token spend — no API key required for any of it (graphify's semantic step runs on a cheap OpenRouter model, not your Claude budget).
 
-Three tools, three layers of the token bill:
+Five tools, every layer of the token bill:
 
 | tool | compresses | mechanism | needs |
 |---|---|---|---|
 | **[rtk](https://github.com/rtk-ai/rtk)** | command output (git/docker/pytest… −60–90%) | `PreToolUse` hook rewrites `git status` → `rtk git status` | brew |
 | **[caveman](https://github.com/JuliusBrussee/caveman)** | Claude's own output (~−65%, terse style) | plugin with its own `SessionStart` hook | Node ≥18 |
 | **graphify** (this repo bundles the setup) | replaces "read the whole repo" with a queryable knowledge graph; semantic extraction runs on **OpenRouter / deepseek**, not Claude tokens | skill + `SessionStart` auto-watch + headless build | [uv](https://docs.astral.sh/uv/) |
+| **[pxpipe](https://github.com/teamchong/pxpipe)** | the whole request — system prompt, tool docs, old history rendered to dense PNGs (~−59–70% input) | local proxy behind `ANTHROPIC_BASE_URL` | Node ≥18 |
+| **[headroom](https://github.com/headroomlabs-ai/headroom)** | request content — tool outputs, logs, RAG chunks, history via content-aware compressors (60–95% on JSON, 15–20% on coding) | local proxy / MCP / library | [uv](https://docs.astral.sh/uv/) or pip |
 
 Companion to the write-up: **[Saving tokens in LLMs — a practical Claude Code guide](https://www.suenot.com/blog/saving-tokens-llm/)**.
 
@@ -56,6 +58,34 @@ Requires `OPENROUTER_API_KEY` in your environment. What `setup.sh` sets up:
 
 Full details: [`graphify/README.md`](graphify/README.md).
 
+## 4. pxpipe — render the request as images
+
+pxpipe is a local proxy that rewrites the bulky, static parts of each request (system prompt, tool docs, older history) into dense PNGs before they leave your machine. An image's token cost is fixed by its pixel size, not its char count — dense text packs ~3× more chars per token as an image than as text, so the request shrinks ~59–70% while the model reads it through the same vision channel it already uses for screenshots. Output streams untouched; only the request is compressed.
+
+It's a proxy, not a plugin — the integration is Claude Code's native `ANTHROPIC_BASE_URL`:
+
+```bash
+npm install -g pxpipe-proxy   # or run on demand: npx pxpipe-proxy
+pxpipe                                            # proxy on 127.0.0.1:47821
+ANTHROPIC_BASE_URL=http://127.0.0.1:47821 claude  # point Claude Code at it
+```
+
+Dashboard at <http://127.0.0.1:47821/>: tokens saved, every text→image conversion, live kill switch. Measures real `saved_pct` against a `count_tokens` counterfactual in `~/.pxpipe/events.jsonl`.
+
+> **Lossy — keep byte-exact values as text.** Exact hex/IDs/hashes/secrets can misread (and misses are silent confabulations, not errors). Recent turns stay text automatically; route verbatim work to a subagent on a non-allowlisted model (`CLAUDE_CODE_SUBAGENT_MODEL=claude-sonnet-4-6`). Best on the Fable 5 reader; Opus misreads imaged content, so it's opt-in.
+
+## 5. headroom — content-aware request compression
+
+headroom compresses everything the agent *reads* — tool outputs, logs, RAG chunks, files, conversation history — with a content router that picks the right compressor per type (JSON, AST/code, prose) and caches originals for reversible retrieval. 60–95% on JSON payloads, ~15–20% on coding-agent traffic. Local-first; your data never leaves the machine.
+
+```bash
+uv tool install headroom-ai    # or: pip install headroom-ai
+headroom wrap claude           # one-command Claude Code integration
+# undo with: headroom unwrap claude
+```
+
+Also runs as a standalone proxy (`headroom proxy --port 8787`), an MCP server (`headroom_compress`/`headroom_retrieve`/`headroom_stats`), or an inline library (`compress(messages)` in Python/TS). `headroom stats` shows the running total. Full docs: <https://headroom-docs.vercel.app/docs>.
+
 ---
 
 ## Claude Code hook map (`~/.claude/settings.json`)
@@ -71,6 +101,8 @@ SessionEnd          -> ~/.graphify/stop-watch.sh            # graphify: stop wat
 
 All take effect on the next Claude Code restart.
 
+**pxpipe and headroom are proxies, not hooks** — they sit between Claude Code and the API via `ANTHROPIC_BASE_URL` (pxpipe) or `headroom wrap claude` (headroom), so they don't appear in the hook map. Run whichever proxy you want in front; the hook-based tools above stack on top independently.
+
 ## License
 
-MIT — see [LICENSE](LICENSE). Not affiliated with Anthropic, rtk, caveman, or graphify; this just wires existing OSS tools together.
+MIT — see [LICENSE](LICENSE). Not affiliated with Anthropic, rtk, caveman, graphify, pxpipe, or headroom; this just wires existing OSS tools together.

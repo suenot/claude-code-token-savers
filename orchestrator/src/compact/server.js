@@ -1,7 +1,7 @@
 import { createServer } from 'node:http';
 import { Readable } from 'node:stream';
 import { isCompactRequest } from './matcher.js';
-import { anthropicToOpenAI, openAIMessageToAnthropic, anthropicSSEChunks } from './translate.js';
+import { anthropicToOpenAI, openAIMessageToAnthropic, anthropicSSEChunks, mapStopReason } from './translate.js';
 
 export function createInterceptor({ port, upstream, model, baseUrl, apiKey, fetchImpl = fetch }) {
   const log = (...a) => process.stderr.write(`[compact-router] ${a.join(' ')}\n`);
@@ -28,13 +28,17 @@ export function createInterceptor({ port, upstream, model, baseUrl, apiKey, fetc
     const data = await r.json();
     const text = data && data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content;
     if (!text) throw new Error('empty external content');
+    const usage = data.usage || {};
+    const inputTokens = usage.prompt_tokens || 0;
+    const outputTokens = usage.completion_tokens || 0;
+    const stopReason = mapStopReason(data.choices?.[0]?.finish_reason);
     if (body.stream) {
       res.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-cache' });
-      for (const f of anthropicSSEChunks(text, { model })) res.write(f);
+      for (const f of anthropicSSEChunks(text, { model, inputTokens, outputTokens, stopReason })) res.write(f);
       res.end();
     } else {
       res.writeHead(200, { 'content-type': 'application/json' });
-      res.end(JSON.stringify(openAIMessageToAnthropic(text, { model })));
+      res.end(JSON.stringify(openAIMessageToAnthropic(text, { model, inputTokens, outputTokens, stopReason })));
     }
   }
 

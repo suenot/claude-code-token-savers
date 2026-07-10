@@ -67,6 +67,45 @@ test('external failure falls back to upstream passthrough', async () => {
   });
 });
 
+test('compact request (stream) returns text/event-stream with named frames', async () => {
+  const fetchImpl = async (url) => {
+    if (url.includes('ext.test')) return { ok: true, json: async () => ({ choices: [{ message: { content: 'S' }, finish_reason: 'stop' }], usage: { prompt_tokens: 3, completion_tokens: 1 } }) };
+    throw new Error('upstream should not be called');
+  };
+  await withServer(fetchImpl, async (base) => {
+    const r = await fetch(`${base}/v1/messages`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(compactBody(true)) });
+    assert.equal(r.headers.get('content-type'), 'text/event-stream');
+    const body = await r.text();
+    assert.match(body, /event: message_start\n/);
+    assert.match(body, /event: content_block_delta\ndata: .*text_delta/);
+    assert.match(body, /event: message_stop\n/);
+  });
+});
+
+test('empty external content falls back to upstream', async () => {
+  const calls = [];
+  const fetchImpl = async (url) => {
+    calls.push(url);
+    if (url.includes('ext.test')) return { ok: true, json: async () => ({ choices: [{ message: { content: '' } }] }) };
+    return { ok: true, status: 200, headers: new Headers(), body: null };
+  };
+  await withServer(fetchImpl, async (base) => {
+    await fetch(`${base}/v1/messages`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(compactBody(false)) });
+    assert.ok(calls.some((u) => u.includes('ext.test')));
+    assert.ok(calls.some((u) => u.includes('upstream.test/v1/messages')));
+  });
+});
+
+test('count_tokens path is passed through, never intercepted', async () => {
+  const calls = [];
+  const fetchImpl = async (url) => { calls.push(url); return { ok: true, status: 200, headers: new Headers(), body: null }; };
+  await withServer(fetchImpl, async (base) => {
+    await fetch(`${base}/v1/messages/count_tokens`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(compactBody(false)) });
+    assert.ok(calls.every((u) => u.includes('upstream.test')));
+    assert.ok(!calls.some((u) => u.includes('ext.test')));
+  });
+});
+
 test('non-compact request passes through to upstream', async () => {
   const calls = [];
   const fetchImpl = async (url) => {

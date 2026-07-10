@@ -10,7 +10,7 @@ test('anthropicToOpenAI: string system + string message', () => {
   assert.equal(r.model, 'deepseek/deepseek-v4-flash');
   assert.deepEqual(r.messages[0], { role: 'system', content: 'sys' });
   assert.deepEqual(r.messages[1], { role: 'user', content: 'hi' });
-  assert.equal(r.max_tokens, 16000); // capped
+  assert.equal(r.max_tokens, 32000); // capped
   assert.equal(r.temperature, 0);
   assert.equal(r.stream, true);
 });

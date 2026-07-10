@@ -69,7 +69,7 @@ export function plan(config, registry = REGISTRY) {
     const next = staged[i + 1];
     const provider = s.d.terminal && terminal !== 'anthropic' ? terminal : undefined;
     const upstreamBase = next ? next.baseUrl : (provider ? undefined : ANTHROPIC_UPSTREAM);
-    const { args, env } = s.d.build({ port: s.port, upstreamBase, provider });
+    const { args, env } = s.d.build({ port: s.port, upstreamBase, provider, config });
     return {
       id: s.id,
       port: s.port,

@@ -31,3 +31,26 @@ test('router descriptor is terminal, wires ROUTER_PORT + UPSTREAM_PROVIDER, has 
   assert.equal(env.ROUTER_PORT, '8080');
   assert.equal(env.UPSTREAM_PROVIDER, 'codex');
 });
+
+test('compact-router is a builtin node stage wired from config', () => {
+  const d = REGISTRY['compact-router'];
+  assert.equal(d.builtin, true);
+  assert.equal(d.terminal, false);
+  assert.equal(d.healthPath, '/health');
+  assert.equal(d.bin, process.execPath);
+  const { args, env } = d.build({
+    port: 47850, upstreamBase: 'http://127.0.0.1:8787',
+    config: { compactRouter: { model: 'deepseek/deepseek-v4-flash' } },
+  });
+  assert.match(args[0], /bin\/compact-interceptor\.js$/);
+  assert.equal(env.PORT, '47850');
+  assert.equal(env.COMPACT_UPSTREAM, 'http://127.0.0.1:8787');
+  assert.equal(env.COMPACT_MODEL, 'deepseek/deepseek-v4-flash');
+  assert.equal(env.COMPACT_BASE_URL, 'https://openrouter.ai/api/v1'); // default
+  assert.equal(env.COMPACT_ENV_KEY, 'OPENROUTER_API_KEY'); // default
+});
+
+test('compact-router applies default model when config omits it', () => {
+  const { env } = REGISTRY['compact-router'].build({ port: 1, upstreamBase: 'http://x' });
+  assert.equal(env.COMPACT_MODEL, 'deepseek/deepseek-v4-flash');
+});

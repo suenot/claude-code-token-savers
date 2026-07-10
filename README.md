@@ -18,7 +18,9 @@ Companion to the write-up: **[Saving tokens in LLMs — a practical Claude Code 
 link-assistant/router together: only one process can own `ANTHROPIC_BASE_URL`
 at a time, so shuba starts the proxies you enable each on its own port, wires
 each one's upstream to the next, and launches `claude` against the head of
-the chain — so the proxies layer instead of fighting over the slot. See
+the chain — so the proxies layer instead of fighting over the slot. Bundled
+here in [`orchestrator/`](orchestrator/); also a standalone repo at
+[suenot/shuba](https://github.com/suenot/shuba). See
 [`orchestrator/README.md`](orchestrator/README.md).
 
 ---

@@ -11,6 +11,7 @@ import { REGISTRY } from './registry.ts';
 import { registerMcp, unregisterMcp } from './control/mcp-register.ts';
 import { disableClientGraphifyHook } from './control/graphify-hook.ts';
 import { detectHarnesses } from './control/harnesses.ts';
+import { createGraph } from './control/graph.ts';
 import type { PlanResult, PlannedStage, ChainHandle } from './types.ts';
 import pkg from '../package.json' with { type: 'json' };
 
@@ -181,6 +182,15 @@ async function doDoctor(): Promise<number> {
   console.log('harnesses:');
   for (const h of detectHarnesses()) {
     console.log(`  ${h.installed ? 'ok ' : 'MISSING'}  ${h.id} (${h.bin})`);
+  }
+
+  try {
+    const graphStatus = createGraph({ cwd: process.cwd() }).status();
+    console.log(
+      `\ngraph: ${graphStatus.built ? 'built' : 'not-initialized'} (${graphStatus.node_count} nodes)`
+    );
+  } catch {
+    console.log('\ngraph: not-initialized (0 nodes)');
   }
 
   return 0;

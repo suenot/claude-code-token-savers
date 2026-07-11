@@ -66,7 +66,7 @@ test('context-watchdog builtin wires threshold/tail/model from config', () => {
     port: 47851, upstreamBase: 'http://127.0.0.1:8787',
     config: { contextWatchdog: { thresholdTokens: 250000, tailTurns: 8 } } as Config,
   });
-  assert.match(args[0], /bin\/context-watchdog\.js$/);
+  assert.match(args[0], /bin\/context-watchdog\.ts$/);
   assert.equal(env.PORT, '47851');
   assert.equal(env.WATCHDOG_UPSTREAM, 'http://127.0.0.1:8787');
   assert.equal(env.WATCHDOG_THRESHOLD, '250000');

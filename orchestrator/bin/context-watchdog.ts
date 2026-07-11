@@ -1,5 +1,5 @@
-#!/usr/bin/env node
-import { createWatchdog } from '../src/watchdog/server.js';
+#!/usr/bin/env bun
+import { createWatchdog } from '../src/watchdog/server.ts';
 
 const port = Number(process.env.PORT || 47851);
 const upstream = process.env.WATCHDOG_UPSTREAM || 'https://api.anthropic.com';

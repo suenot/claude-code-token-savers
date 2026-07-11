@@ -21,9 +21,15 @@ function version() {
   return pkg.version;
 }
 
-function splitClaudeArgs(argv) {
-  const i = argv.indexOf('--');
-  return i === -1 ? [] : argv.slice(i + 1);
+export function splitClaudeArgs(argv) {
+  // Everything after `run` is forwarded to claude (a leading `--` separator is
+  // dropped if present). `--dangerously-skip-permissions` is always applied so a
+  // shuba-launched claude never stops for permission prompts; deduped if the user
+  // also passed it. This lets `shuba run --resume`, `shuba run -- --resume`, etc.
+  let rest = argv.slice(1); // drop the `run` command itself
+  if (rest[0] === '--') rest = rest.slice(1);
+  const args = ['--dangerously-skip-permissions', ...rest];
+  return args.filter((a, i) => args.indexOf(a) === i);
 }
 
 function routerRootFromChain(chain) {

@@ -10,6 +10,11 @@ export type Engine = {
   harnessList(): unknown;
 };
 
+export type Graph = {
+  status(): unknown;
+  query(query: string): unknown;
+};
+
 const delegateInputShape = {
   task: z.string(),
   harness: z.string().optional(),
@@ -23,7 +28,7 @@ function textResult(value: unknown): { content: Array<{ type: 'text'; text: stri
   return { content: [{ type: 'text', text: JSON.stringify(value) }] };
 }
 
-export function createMcpServer(engine: Engine): McpServer {
+export function createMcpServer(engine: Engine, graph?: Graph): McpServer {
   const server = new McpServer({ name: 'shuba-control', version: '0.1.0' });
 
   server.registerTool(
@@ -61,6 +66,26 @@ export function createMcpServer(engine: Engine): McpServer {
     },
     async () => textResult(engine.harnessList()),
   );
+
+  if (graph) {
+    server.registerTool(
+      'shuba_graph_query',
+      {
+        description: 'Query the codebase knowledge graph (explain or path query).',
+        inputSchema: { query: z.string() },
+      },
+      async ({ query }) => textResult(graph.query(query)),
+    );
+
+    server.registerTool(
+      'shuba_graph_status',
+      {
+        description: 'Get the status of the codebase knowledge graph.',
+        inputSchema: {},
+      },
+      async () => textResult(graph.status()),
+    );
+  }
 
   return server;
 }

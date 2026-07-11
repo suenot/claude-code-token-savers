@@ -12,6 +12,11 @@ type Engine = {
   listJobs(): unknown;
 };
 
+type Graph = {
+  status(): unknown;
+  query(query: string): unknown;
+};
+
 const CONTENT_TYPES: Record<string, string> = {
   '.html': 'text/html; charset=utf-8',
   '.js': 'text/javascript; charset=utf-8',
@@ -73,8 +78,9 @@ async function readBody(req: IncomingMessage): Promise<string> {
   return Buffer.concat(chunks).toString('utf8');
 }
 
-export function createControlHttp(engine: Engine, opts?: { staticDir?: string }): Server {
+export function createControlHttp(engine: Engine, opts?: { staticDir?: string; graph?: Graph }): Server {
   const staticDir = opts?.staticDir;
+  const graph = opts?.graph;
 
   const server = createServer((req, res) => {
     void handleRequest(req, res).catch((err) => {
@@ -158,6 +164,39 @@ export function createControlHttp(engine: Engine, opts?: { staticDir?: string })
         return;
       }
       const result = await engine.delegate(body);
+      sendJson(res, 200, result);
+      return;
+    }
+
+    if (method === 'GET' && pathname === '/api/graph') {
+      if (!graph) {
+        sendJson(res, 404, { error: 'graph not enabled' });
+        return;
+      }
+      sendJson(res, 200, graph.status());
+      return;
+    }
+
+    if (method === 'POST' && pathname === '/api/graph/query') {
+      if (!graph) {
+        sendJson(res, 404, { error: 'graph not enabled' });
+        return;
+      }
+      // Same JSON-content-type + Origin guard pattern as /api/delegate.
+      const contentType = req.headers['content-type'];
+      if (typeof contentType !== 'string' || !contentType.toLowerCase().startsWith('application/json')) {
+        sendJson(res, 415, { error: 'content-type must be application/json' });
+        return;
+      }
+      const raw = await readBody(req);
+      let body: { query?: string };
+      try {
+        body = raw.length > 0 ? JSON.parse(raw) : {};
+      } catch {
+        sendJson(res, 400, { error: 'invalid JSON body' });
+        return;
+      }
+      const result = graph.query(body.query ?? '');
       sendJson(res, 200, result);
       return;
     }

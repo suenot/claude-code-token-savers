@@ -69,7 +69,7 @@ These types make the planner↔registry↔supervisor contract explicit. No runti
 
 ## 6. Testing / acceptance
 
-- `bun test` passes with the same test count as today (70 + rate-limiter's 6 = 76), all green.
+- `bun test` passes with the same test count as today (70, including rate-limiter's 6), all green.
 - `tsc --noEmit` clean under `strict`.
 - Manual smoke: `bun bin/shuba.ts doctor` prints the planned chain; `bun bin/shuba.ts up` brings the full chain up (compact-router → context-watchdog → headroom → pxpipe → rate-limiter) and each `/health` returns ok.
 - Each builtin stage (`compact-router`, `context-watchdog`, `rate-limiter`) confirmed to spawn under Bun via `process.execPath`.

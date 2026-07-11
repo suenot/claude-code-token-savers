@@ -1,0 +1,4 @@
+console/dist
+*.tsbuildinfo
+node_modules
+shuba

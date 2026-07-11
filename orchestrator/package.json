@@ -12,15 +12,21 @@
     "dev": "bun bin/shuba.ts",
     "test": "bun test",
     "typecheck": "tsc --noEmit",
-    "build": "bun build ./bin/shuba.ts --compile --outfile shuba"
+    "build": "bun build ./bin/shuba.ts --compile --outfile shuba",
+    "console:build": "bun build console/src/main.tsx --outdir console/dist --target browser",
+    "console:dev": "bun build console/src/main.tsx --outdir console/dist --target browser --watch"
   },
   "license": "MIT",
   "devDependencies": {
     "@types/bun": "^1.3.14",
+    "@types/react": "^19.2.17",
+    "@types/react-dom": "^19.2.3",
     "typescript": "5"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7",
     "zod": "^4.4.3"
   }
 }

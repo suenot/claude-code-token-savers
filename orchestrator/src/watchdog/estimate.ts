@@ -1,4 +1,4 @@
-function flatten(content) {
+function flatten(content: any): string {
   if (typeof content === 'string') return content;
   if (!Array.isArray(content)) return '';
   return content.map((b) => {
@@ -10,7 +10,7 @@ function flatten(content) {
   }).join('');
 }
 
-export function estimateTokens(body) {
+export function estimateTokens(body: { system?: any; messages?: any[] }): number {
   let chars = 0;
   if (body && body.system) chars += flatten(body.system).length;
   for (const m of (body && body.messages) || []) chars += flatten(m.content).length;

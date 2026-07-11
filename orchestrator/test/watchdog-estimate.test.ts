@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { estimateTokens } from '../src/watchdog/estimate.js';
+import { estimateTokens } from '../src/watchdog/estimate.ts';
 
 test('empty body → 0', () => {
   assert.equal(estimateTokens({}), 0);

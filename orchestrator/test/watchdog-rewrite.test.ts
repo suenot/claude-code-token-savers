@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { summaryKey, buildRewrittenBody } from '../src/watchdog/rewrite.js';
+import { summaryKey, buildRewrittenBody } from '../src/watchdog/rewrite.ts';
 
 test('summaryKey is stable and content-sensitive', () => {
   const a = summaryKey([{ role: 'user', content: 'x' }]);
@@ -23,7 +23,7 @@ test('buildRewrittenBody preserves system, injects summary + ack, appends tail',
   assert.equal(out.messages[1].role, 'assistant');
   assert.deepEqual(out.messages.slice(2), tail);
   // valid alternation: user, assistant, user, assistant
-  assert.deepEqual(out.messages.map((m) => m.role), ['user', 'assistant', 'user', 'assistant']);
+  assert.deepEqual(out.messages.map((m: any) => m.role), ['user', 'assistant', 'user', 'assistant']);
   // original body not mutated
   assert.deepEqual(body.messages, [{ role: 'user', content: 'orig' }]);
 });

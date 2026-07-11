@@ -88,12 +88,24 @@ export function createGraph(opts: {
   }
 
   function query(q: string, queryOpts?: { model?: string }): GraphQueryResult {
-    const args = q.includes(' -> ')
+    const positionals = q.includes(' -> ')
       ? (() => {
           const [a, b] = q.split(' -> ');
-          return ['path', (a ?? '').trim(), (b ?? '').trim()];
+          return [(a ?? '').trim(), (b ?? '').trim()];
         })()
-      : ['explain', q];
+      : [q];
+
+    // Defensive validation against argv flag injection: graphify's CLI parses
+    // `explain`/`path` positionals by fixed argv index (not via getopt-style
+    // flag scanning) and has no `--` end-of-options support, so a positional
+    // starting with '-' cannot actually be reinterpreted as a graphify flag in
+    // the current CLI. Still, reject leading-dash positionals defensively in
+    // case that parsing ever changes.
+    if (positionals.some((p) => p.startsWith('-'))) {
+      return { ok: false, result: 'invalid query (leading dash)' };
+    }
+
+    const args = positionals.length === 2 ? ['path', ...positionals] : ['explain', ...positionals];
     args.push('--graph', path);
 
     const model = queryOpts?.model ?? opts.model ?? 'deepseek/deepseek-v4-flash';

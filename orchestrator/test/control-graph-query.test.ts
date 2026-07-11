@@ -59,3 +59,26 @@ test('query: throwing execFileImpl → {ok:false, result:<message>} (no throw)',
   assert.equal(result.ok, false);
   assert.match(result.result, /boom/);
 });
+
+test('query: leading-dash query (flag-like) is rejected before reaching execFile (argv injection guard)', () => {
+  const cwd = mkdtempSync(join(tmpdir(), 'g-'));
+  const calls: Array<{ file: string; args: string[]; opts: unknown }> = [];
+  const execFileImpl = (file: string, args: string[], opts: unknown) => {
+    calls.push({ file, args, opts });
+    return 'should-not-be-reached';
+  };
+
+  const result = createGraph({ cwd, execFileImpl }).query('--graph');
+
+  assert.equal(calls.length, 0);
+  assert.deepEqual(result, { ok: false, result: 'invalid query (leading dash)' });
+});
+
+test('query: leading-dash node in "A -> B" path form is rejected', () => {
+  const cwd = mkdtempSync(join(tmpdir(), 'g-'));
+  const execFileImpl = () => 'should-not-be-reached';
+
+  const result = createGraph({ cwd, execFileImpl }).query('--backend -> B');
+
+  assert.deepEqual(result, { ok: false, result: 'invalid query (leading dash)' });
+});

@@ -43,6 +43,7 @@ export type Config = {
   rateLimiter?: { rps?: number; burst?: number; cooldownMs?: number };
   delegate?: DelegateConfig;
   control?: { enabled?: boolean };
+  graph?: { model?: string; autobuild?: boolean; noMedia?: boolean; enabled?: boolean };
 };
 
 export type PlannedStage = {

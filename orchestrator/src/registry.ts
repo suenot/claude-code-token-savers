@@ -124,6 +124,7 @@ export const REGISTRY: Record<string, StageDescriptor> = {
     healthPath: '/health',
     build({ port, config }: BuildContext): BuildResult {
       const delegate = config?.delegate ?? { default: { harness: 'opencode', model: 'deepseek/deepseek-v4-flash' } };
+      const graph = config?.graph ?? {};
       return {
         args: [CONTROL_BIN],
         env: {
@@ -133,6 +134,7 @@ export const REGISTRY: Record<string, StageDescriptor> = {
           // gets neither this env var nor PORT). See bin/shuba-control.ts.
           SHUBA_CONTROL_HTTP: '1',
           DELEGATE_JSON: JSON.stringify(delegate),
+          GRAPH_JSON: JSON.stringify(graph),
           OPENROUTER_API_KEY: process.env.OPENROUTER_API_KEY ?? '',
         },
       };

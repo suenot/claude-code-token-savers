@@ -8,6 +8,7 @@ import { mintToken } from './router-bootstrap.ts';
 import { runClaude } from './launcher.ts';
 import { REGISTRY } from './registry.ts';
 import { registerMcp, unregisterMcp } from './control/mcp-register.ts';
+import { detectHarnesses } from './control/harnesses.ts';
 import type { PlanResult, PlannedStage, ChainHandle } from './types.ts';
 import pkg from '../package.json' with { type: 'json' };
 
@@ -147,6 +148,14 @@ async function doDoctor(): Promise<number> {
   } else {
     console.log('\ninvalid chain:\n  - ' + result.errors.join('\n  - '));
   }
+
+  const controlEnabled = config.control?.enabled !== false;
+  console.log(`\ncontrol: ${controlEnabled ? 'enabled' : 'disabled'} (shuba-control sidecar)`);
+  console.log('harnesses:');
+  for (const h of detectHarnesses()) {
+    console.log(`  ${h.installed ? 'ok ' : 'MISSING'}  ${h.id} (${h.bin})`);
+  }
+
   return 0;
 }
 

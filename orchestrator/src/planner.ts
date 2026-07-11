@@ -1,15 +1,16 @@
-import { REGISTRY } from './registry.js';
+import { REGISTRY } from './registry.ts';
+import type { Config, StageDescriptor, PlannedStage, PlanResult } from './types.ts';
 
 const TERMINALS = new Set(['anthropic', 'codex', 'gemini', 'qwen', 'openai-compatible']);
 const ANTHROPIC_UPSTREAM = 'https://api.anthropic.com';
 
-function baseUrlFor(descriptor, port) {
+function baseUrlFor(descriptor: StageDescriptor, port: number): string {
   const root = `http://127.0.0.1:${port}`;
   return descriptor.clientPathSuffix ? root + descriptor.clientPathSuffix : root;
 }
 
-export function plan(config, registry = REGISTRY) {
-  const errors = [];
+export function plan(config: Config, registry: Record<string, StageDescriptor> = REGISTRY): PlanResult {
+  const errors: string[] = [];
   const terminal = config.terminal;
   const compressors = config.compressors ?? [];
   const ports = config.ports ?? {};
@@ -33,7 +34,7 @@ export function plan(config, registry = REGISTRY) {
   }
 
   // Duplicate compressor ids.
-  const seen = new Set();
+  const seen = new Set<string>();
   for (const id of compressors) {
     if (seen.has(id)) errors.push(`duplicate compressor id "${id}" — each compressor may appear at most once`);
     seen.add(id);
@@ -49,10 +50,10 @@ export function plan(config, registry = REGISTRY) {
   });
 
   // Port collisions: two stages resolving to the same port.
-  const portOwners = new Map();
+  const portOwners = new Map<number, string[]>();
   for (const s of staged) {
     if (!portOwners.has(s.port)) portOwners.set(s.port, []);
-    portOwners.get(s.port).push(s.id);
+    portOwners.get(s.port)!.push(s.id);
   }
   for (const [port, ids] of portOwners) {
     if (ids.length > 1) {
@@ -65,7 +66,7 @@ export function plan(config, registry = REGISTRY) {
   // Wire upstreams: each stage forwards to the next stage's baseUrl; the terminal
   // anthropic stage forwards to the real Anthropic API. The router is terminal and
   // takes provider instead of an upstreamBase.
-  const chain = staged.map((s, i) => {
+  const chain: PlannedStage[] = staged.map((s, i) => {
     const next = staged[i + 1];
     const provider = s.d.terminal && terminal !== 'anthropic' ? terminal : undefined;
     const upstreamBase = next ? next.baseUrl : (provider ? undefined : ANTHROPIC_UPSTREAM);

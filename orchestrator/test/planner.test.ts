@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { plan } from '../src/planner.js';
+import { plan } from '../src/planner.ts';
 
 test('compressors on anthropic terminal: pxpipe -> headroom -> api.anthropic.com', () => {
   const r = plan({ terminal: 'anthropic', compressors: ['pxpipe', 'headroom'] });

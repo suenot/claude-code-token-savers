@@ -290,7 +290,7 @@ export function createControlHttp(
       const limitParam = url.searchParams.get('limit');
       const parsedLimit = limitParam !== null ? Number.parseInt(limitParam, 10) : NaN;
       const limit = Number.isFinite(parsedLimit) && parsedLimit > 0 ? parsedLimit : undefined;
-      sendJson(res, 200, await collector.recentRequests(limit));
+      sendJson(res, 200, await collector.hopLog(limit));
       return;
     }
 

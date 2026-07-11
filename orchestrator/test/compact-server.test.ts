@@ -1,26 +1,27 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { once } from 'node:events';
-import { createInterceptor } from '../src/compact/server.js';
+import { createInterceptor } from '../src/compact/server.ts';
 
-const compactBody = (stream) => ({
+const compactBody = (stream: boolean) => ({
   model: 'claude-opus-4-8', max_tokens: 64000, stream,
   messages: [{ role: 'user', content: 'Your task is to create a detailed summary of the conversation so far.' }],
 });
 
-async function withServer(fetchImpl, fn) {
+async function withServer(fetchImpl: any, fn: (base: string) => Promise<any>) {
   const srv = createInterceptor({
     port: 0, upstream: 'https://upstream.test', model: 'deepseek/deepseek-v4-flash',
     baseUrl: 'https://ext.test/v1', apiKey: 'k', fetchImpl,
   });
   srv.listen(0);
   await once(srv, 'listening');
-  const base = `http://127.0.0.1:${srv.address().port}`;
+  const address = srv.address();
+  const base = `http://127.0.0.1:${typeof address === 'object' && address ? address.port : ''}`;
   try { return await fn(base); } finally { srv.close(); }
 }
 
 test('health returns ok', async () => {
-  await withServer(async () => ({ ok: true }), async (base) => {
+  await withServer(async () => ({ ok: true }), async (base: string) => {
     const r = await fetch(`${base}/health`);
     assert.equal(r.status, 200);
     assert.deepEqual(await r.json(), { status: 'ok' });
@@ -28,15 +29,15 @@ test('health returns ok', async () => {
 });
 
 test('compact request (non-stream) is served by the external model', async () => {
-  const calls = [];
-  const fetchImpl = async (url, opts) => {
+  const calls: string[] = [];
+  const fetchImpl = async (url: string, opts?: any) => {
     calls.push(url);
     if (url.includes('ext.test')) {
       return { ok: true, json: async () => ({ choices: [{ message: { content: 'CHEAP SUMMARY' } }] }) };
     }
     throw new Error('upstream should not be called');
   };
-  await withServer(fetchImpl, async (base) => {
+  await withServer(fetchImpl, async (base: string) => {
     const r = await fetch(`${base}/v1/messages`, {
       method: 'POST', headers: { 'content-type': 'application/json' },
       body: JSON.stringify(compactBody(false)),
@@ -49,14 +50,14 @@ test('compact request (non-stream) is served by the external model', async () =>
 });
 
 test('external failure falls back to upstream passthrough', async () => {
-  const calls = [];
-  const fetchImpl = async (url) => {
+  const calls: string[] = [];
+  const fetchImpl = async (url: string) => {
     calls.push(url);
     if (url.includes('ext.test')) throw new Error('model down');
     // upstream passthrough
     return { ok: true, status: 200, headers: new Headers({ 'content-type': 'application/json' }), body: null };
   };
-  await withServer(fetchImpl, async (base) => {
+  await withServer(fetchImpl, async (base: string) => {
     const r = await fetch(`${base}/v1/messages`, {
       method: 'POST', headers: { 'content-type': 'application/json' },
       body: JSON.stringify(compactBody(false)),
@@ -68,11 +69,11 @@ test('external failure falls back to upstream passthrough', async () => {
 });
 
 test('compact request (stream) returns text/event-stream with named frames', async () => {
-  const fetchImpl = async (url) => {
+  const fetchImpl = async (url: string) => {
     if (url.includes('ext.test')) return { ok: true, json: async () => ({ choices: [{ message: { content: 'S' }, finish_reason: 'stop' }], usage: { prompt_tokens: 3, completion_tokens: 1 } }) };
     throw new Error('upstream should not be called');
   };
-  await withServer(fetchImpl, async (base) => {
+  await withServer(fetchImpl, async (base: string) => {
     const r = await fetch(`${base}/v1/messages`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(compactBody(true)) });
     assert.equal(r.headers.get('content-type'), 'text/event-stream');
     const body = await r.text();
@@ -83,13 +84,13 @@ test('compact request (stream) returns text/event-stream with named frames', asy
 });
 
 test('empty external content falls back to upstream', async () => {
-  const calls = [];
-  const fetchImpl = async (url) => {
+  const calls: string[] = [];
+  const fetchImpl = async (url: string) => {
     calls.push(url);
     if (url.includes('ext.test')) return { ok: true, json: async () => ({ choices: [{ message: { content: '' } }] }) };
     return { ok: true, status: 200, headers: new Headers(), body: null };
   };
-  await withServer(fetchImpl, async (base) => {
+  await withServer(fetchImpl, async (base: string) => {
     await fetch(`${base}/v1/messages`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(compactBody(false)) });
     assert.ok(calls.some((u) => u.includes('ext.test')));
     assert.ok(calls.some((u) => u.includes('upstream.test/v1/messages')));
@@ -97,9 +98,9 @@ test('empty external content falls back to upstream', async () => {
 });
 
 test('count_tokens path is passed through, never intercepted', async () => {
-  const calls = [];
-  const fetchImpl = async (url) => { calls.push(url); return { ok: true, status: 200, headers: new Headers(), body: null }; };
-  await withServer(fetchImpl, async (base) => {
+  const calls: string[] = [];
+  const fetchImpl = async (url: string) => { calls.push(url); return { ok: true, status: 200, headers: new Headers(), body: null }; };
+  await withServer(fetchImpl, async (base: string) => {
     await fetch(`${base}/v1/messages/count_tokens`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(compactBody(false)) });
     assert.ok(calls.every((u) => u.includes('upstream.test')));
     assert.ok(!calls.some((u) => u.includes('ext.test')));
@@ -107,12 +108,12 @@ test('count_tokens path is passed through, never intercepted', async () => {
 });
 
 test('non-compact request passes through to upstream', async () => {
-  const calls = [];
-  const fetchImpl = async (url) => {
+  const calls: string[] = [];
+  const fetchImpl = async (url: string) => {
     calls.push(url);
     return { ok: true, status: 200, headers: new Headers(), body: null };
   };
-  await withServer(fetchImpl, async (base) => {
+  await withServer(fetchImpl, async (base: string) => {
     await fetch(`${base}/v1/messages`, {
       method: 'POST', headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ messages: [{ role: 'user', content: 'normal question' }] }),

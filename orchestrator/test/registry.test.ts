@@ -43,7 +43,7 @@ test('compact-router is a builtin node stage wired from config', () => {
     port: 47850, upstreamBase: 'http://127.0.0.1:8787',
     config: { compactRouter: { model: 'deepseek/deepseek-v4-flash' } } as Config,
   });
-  assert.match(args[0], /bin\/compact-interceptor\.js$/);
+  assert.match(args[0], /bin\/compact-interceptor\.ts$/);
   assert.equal(env.PORT, '47850');
   assert.equal(env.COMPACT_UPSTREAM, 'http://127.0.0.1:8787');
   assert.equal(env.COMPACT_MODEL, 'deepseek/deepseek-v4-flash');

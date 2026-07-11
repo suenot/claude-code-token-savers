@@ -1,5 +1,5 @@
-#!/usr/bin/env node
-import { createInterceptor } from '../src/compact/server.js';
+#!/usr/bin/env bun
+import { createInterceptor } from '../src/compact/server.ts';
 
 const port = Number(process.env.PORT || 47850);
 const upstream = process.env.COMPACT_UPSTREAM || 'https://api.anthropic.com';

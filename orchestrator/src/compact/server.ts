@@ -1,26 +1,33 @@
-import { createServer } from 'node:http';
+import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import { Readable } from 'node:stream';
-import { isCompactRequest } from './matcher.js';
-import { anthropicToOpenAI, openAIMessageToAnthropic, anthropicSSEChunks, mapStopReason } from './translate.js';
+import { isCompactRequest } from './matcher.ts';
+import { anthropicToOpenAI, openAIMessageToAnthropic, anthropicSSEChunks, mapStopReason } from './translate.ts';
 
-export function createInterceptor({ port, upstream, model, baseUrl, apiKey, fetchImpl = fetch }) {
-  const log = (...a) => process.stderr.write(`[compact-router] ${a.join(' ')}\n`);
+export function createInterceptor({ port, upstream, model, baseUrl, apiKey, fetchImpl = fetch }: {
+  port: number;
+  upstream: string;
+  model: string;
+  baseUrl: string;
+  apiKey: string;
+  fetchImpl?: typeof fetch;
+}): Server {
+  const log = (...a: string[]) => process.stderr.write(`[compact-router] ${a.join(' ')}\n`);
 
-  async function passthrough(req, raw, res) {
-    const headers = { ...req.headers };
+  async function passthrough(req: IncomingMessage, raw: Buffer, res: ServerResponse) {
+    const headers: Record<string, any> = { ...req.headers };
     delete headers.host; delete headers['content-length']; delete headers['accept-encoding'];
-    const up = await fetchImpl(upstream + req.url, { method: req.method, headers, body: raw.length ? raw : undefined });
+    const up = await fetchImpl(upstream + req.url, { method: req.method, headers, body: raw.length ? raw : undefined } as RequestInit);
     const out = Object.fromEntries((up.headers && up.headers.entries) ? up.headers.entries() : []);
     delete out['content-encoding']; delete out['content-length']; delete out['transfer-encoding'];
     res.writeHead(up.status || 200, out);
     if (up.body) {
-      const stream = Readable.fromWeb(up.body);
+      const stream = Readable.fromWeb(up.body as any);
       stream.on('error', () => { try { res.destroy(); } catch { /* already closed */ } });
       stream.pipe(res);
     } else res.end();
   }
 
-  async function serveCompact(body, res) {
+  async function serveCompact(body: any, res: ServerResponse) {
     const oreq = anthropicToOpenAI(body, model);
     const ac = new AbortController();
     const timer = setTimeout(() => ac.abort(), 60000);
@@ -36,7 +43,7 @@ export function createInterceptor({ port, upstream, model, baseUrl, apiKey, fetc
       clearTimeout(timer);
     }
     if (!r.ok) throw new Error(`external ${r.status}`);
-    const data = await r.json();
+    const data: any = await r.json();
     const text = data && data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content;
     if (!text) throw new Error('empty external content');
     const usage = data.usage || {};
@@ -59,12 +66,12 @@ export function createInterceptor({ port, upstream, model, baseUrl, apiKey, fetc
       res.end('{"status":"ok"}');
       return;
     }
-    const chunks = [];
+    const chunks: Buffer[] = [];
     req.on('data', (c) => chunks.push(c));
     req.on('end', async () => {
       const raw = Buffer.concat(chunks);
-      const isMessages = req.method === 'POST' && req.url.includes('/v1/messages') && !req.url.includes('count_tokens');
-      let body = null;
+      const isMessages = req.method === 'POST' && !!req.url && req.url.includes('/v1/messages') && !req.url.includes('count_tokens');
+      let body: any = null;
       if (isMessages) { try { body = JSON.parse(raw.toString('utf8')); } catch { body = null; } }
       try {
         if (body && isCompactRequest(body)) {
@@ -72,14 +79,14 @@ export function createInterceptor({ port, upstream, model, baseUrl, apiKey, fetc
             await serveCompact(body, res);
             log('intercepted', model);
             return;
-          } catch (e) {
+          } catch (e: any) {
             log('fallback', e.message);
             await passthrough(req, raw, res);
             return;
           }
         }
         await passthrough(req, raw, res);
-      } catch (e) {
+      } catch (e: any) {
         if (!res.headersSent) res.writeHead(502);
         res.end('compact-router error: ' + e.message);
       }

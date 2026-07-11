@@ -1,7 +1,7 @@
 import { fileURLToPath } from 'node:url';
 import type { StageDescriptor, BuildContext, BuildResult } from './types.ts';
 
-const COMPACT_BIN = fileURLToPath(new URL('../bin/compact-interceptor.js', import.meta.url));
+const COMPACT_BIN = fileURLToPath(new URL('../bin/compact-interceptor.ts', import.meta.url));
 const WATCHDOG_BIN = fileURLToPath(new URL('../bin/context-watchdog.js', import.meta.url));
 const RATELIMIT_BIN = fileURLToPath(new URL('../bin/rate-limiter.js', import.meta.url));
 

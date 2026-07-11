@@ -23,9 +23,31 @@ const CONSOLE_DIST = fileURLToPath(new URL('../console/dist', import.meta.url));
 // this is a best-effort default set — a follow-up could pass the resolved
 // PlannedStage list via env if per-run ports diverge from the registry
 // defaults.
-const DEFAULT_CHAIN_STAGES: ChainStage[] = Object.values(REGISTRY)
-  .filter((d) => d.id !== 'control')
-  .map((d) => ({ id: d.id, port: d.defaultPort, healthUrl: `http://127.0.0.1:${d.defaultPort}${d.healthPath}` }));
+// Probe only the stages actually in the running chain (config.compressors,
+// passed via CHAIN_JSON), not every registry entry — otherwise unused stages
+// like the non-anthropic `router` show a false "down" in the console.
+function chainStages(): ChainStage[] {
+  let ids: string[] = [];
+  const raw = process.env.CHAIN_JSON;
+  if (raw) {
+    try {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) ids = parsed.filter((x): x is string => typeof x === 'string');
+    } catch {
+      // fall through to default below
+    }
+  }
+  if (ids.length === 0) {
+    // Fallback: all non-terminal, non-control registry stages (excludes `router`).
+    ids = Object.values(REGISTRY).filter((d) => d.id !== 'control' && !d.terminal).map((d) => d.id);
+  }
+  return ids
+    .map((id) => REGISTRY[id])
+    .filter((d): d is NonNullable<typeof d> => Boolean(d))
+    .map((d) => ({ id: d.id, port: d.defaultPort, healthUrl: `http://127.0.0.1:${d.defaultPort}${d.healthPath}` }));
+}
+
+const DEFAULT_CHAIN_STAGES: ChainStage[] = chainStages();
 
 const DEFAULT_CFG: DelegateConfig = {
   default: { harness: 'opencode', model: 'deepseek/deepseek-v4-flash' },

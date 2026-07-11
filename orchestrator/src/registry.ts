@@ -125,10 +125,14 @@ export const REGISTRY: Record<string, StageDescriptor> = {
     build({ port, config }: BuildContext): BuildResult {
       const delegate = config?.delegate ?? { default: { harness: 'opencode', model: 'deepseek/deepseek-v4-flash' } };
       const graph = config?.graph ?? {};
+      const compressors = config?.compressors ?? [];
       return {
         args: [CONTROL_BIN],
         env: {
           PORT: String(port),
+          // The actual running chain (compressors), so the console probes only
+          // live stages — not every registry entry (which would false-red `router`).
+          CHAIN_JSON: JSON.stringify(compressors),
           // Marks this as the HTTP-serving sidecar instance (as opposed to
           // the stdio-MCP instance Claude Code spawns via .mcp.json, which
           // gets neither this env var nor PORT). See bin/shuba-control.ts.

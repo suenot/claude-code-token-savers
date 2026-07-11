@@ -24,6 +24,10 @@ complementary way:
   just Claude Code's `/compact`/autocompact summarization request to a cheap
   model, leaving every other request untouched. See
   [below](#compact-router) for details.
+- **context-watchdog** — a built-in stage (no external binary) that
+  proactively rewrites any over-threshold request to keep the flagship's
+  context small **before** Claude Code's own autocompact kicks in. See
+  [below](#context-watchdog) for details.
 
 Run bare, only one of them can sit behind `ANTHROPIC_BASE_URL`. **shuba**
 starts the proxies you've enabled, each on its own port, wires each one's
@@ -82,12 +86,16 @@ the exact install command for each.
 
 - **`terminal`** — where the chain ends up talking:
   `anthropic | codex | gemini | qwen | openai-compatible`.
-- **`compressors`** — subset of `["headroom", "pxpipe", "compact-router"]`, in
-  chain order (first entry = closest to Claude Code, i.e. it sees the request
-  first). `compact-router` is recommended **first** — see
-  [below](#compact-router).
+- **`compressors`** — subset of `["headroom", "pxpipe", "compact-router",
+  "context-watchdog"]`, in chain order (first entry = closest to Claude Code,
+  i.e. it sees the request first). `compact-router` is recommended **first**
+  — see [below](#compact-router) — and `context-watchdog` should come
+  **after** it — see [below](#context-watchdog).
 - **`compactRouter`** — optional config block for the `compact-router` stage
   (model/baseUrl/envKey); see [below](#compact-router).
+- **`contextWatchdog`** — optional config block for the `context-watchdog`
+  stage (thresholdTokens/tailTurns/model/baseUrl/envKey); see
+  [below](#context-watchdog).
 - **`ports`** — optional per-proxy port overrides (`{ "pxpipe": 47821,
   "headroom": 8787, "router": 8080 }`); registry defaults are used otherwise.
 
@@ -165,13 +173,103 @@ context-rot if summaries start dropping details you needed. If that happens,
 raise the model in `compactRouter.model` (any OpenAI-compatible model behind
 the same `baseUrl`/`envKey` works).
 
-### Coming later: context-watchdog (Phase 2)
+## context-watchdog
 
-Planned, not yet built: a `context-watchdog` stage that proactively compacts
-the session **before** Claude Code's own autocompact kicks in, once the
-request's estimated token count crosses a configurable threshold (default
-**300,000**), summarizing older turns via the same cheap-model path while
-keeping a live recent tail verbatim.
+**context-watchdog** is a built-in shuba stage — like compact-router it
+spawns our own Node module (`orchestrator/bin/context-watchdog.js`) instead
+of an external binary, and flows through the same supervisor/planner as any
+other compressor.
+
+### What it does
+
+context-watchdog rewrites any `POST /v1/messages` request whose estimated
+token count exceeds a threshold (default **300,000**): it summarizes the
+**older** turns via a cheap model and forwards the flagship a shortened
+body — `[summary]` plus a verbatim recent tail — instead of the full
+history. The flagship's **response is proxied back untouched**: this is a
+request-mutating passthrough, not a translating one (no SSE rewriting, no
+Anthropic⇄OpenAI dance on the way back).
+
+### Why it saves money (and improves quality)
+
+Smaller context is both cheaper **and** higher quality — a bloated context
+suffers context rot even when the flagship can technically still fit it.
+compact-router only steps in reactively, at the moment Claude Code itself
+decides to run `/compact` (manual or autocompact, near its ~1M limit).
+context-watchdog instead caps the context **proactively**, well before that
+point, so the flagship is never dragging around a needlessly huge prompt in
+the first place.
+
+### The mechanism, honestly
+
+A proxy cannot make the Claude Code client run `/compact` — there is no
+client-side trigger channel and no way to set a custom autocompact
+threshold from outside. The only viable lever is **rewriting the outgoing
+request**: when the estimate crosses the threshold, context-watchdog
+replaces the older messages with a compact summary before forwarding.
+Claude Code itself keeps its full transcript and keeps resending it every
+turn — only the copy that reaches the model is shortened.
+
+### Stateful, cache-stable summarization
+
+The summary is cached **content-addressed**: the cache key is a sha256 of
+the canonical JSON of the older prefix being summarized. Since Claude Code
+resends the full history each turn, that older prefix is byte-identical
+across turns, so the same key keeps hitting the cache — the watchdog only
+calls the cheap model again once the tail grows past the threshold and the
+cut point actually advances. The same content-addressing keeps the
+rewritten prefix (`[system] + [summary block]`) **byte-stable** turn over
+turn, so the flagship's own prompt cache keeps hitting on it too, instead of
+being invalidated by a re-summarized preamble on every request.
+
+### Config
+
+Add `"context-watchdog"` to `compressors`, placed **after** `compact-router`
+so Claude Code's own `/compact` requests are caught and handled by
+compact-router first (see [Interaction with compact-router](#interaction-with-compact-router)
+below). An optional `contextWatchdog` block tunes the threshold, tail size,
+and model:
+
+```json
+{
+  "terminal": "anthropic",
+  "compressors": ["compact-router", "context-watchdog"],
+  "compactRouter": {
+    "model": "deepseek/deepseek-v4-flash",
+    "baseUrl": "https://openrouter.ai/api/v1",
+    "envKey": "OPENROUTER_API_KEY"
+  },
+  "contextWatchdog": {
+    "thresholdTokens": 300000,
+    "tailTurns": 6,
+    "model": "deepseek/deepseek-v4-flash"
+  },
+  "ports": {}
+}
+```
+
+Defaults (used when `contextWatchdog` is omitted, or any of its fields are):
+`thresholdTokens: 300000`, `tailTurns: 6`, model `deepseek/deepseek-v4-flash`
+via OpenRouter, using the `OPENROUTER_API_KEY` environment variable
+(`baseUrl`/`envKey` follow the same defaults as compact-router).
+
+### Interaction with compact-router
+
+context-watchdog **skips** Claude Code's own `/compact`/autocompact
+requests — they're fingerprinted the same way compact-router detects them
+and are left for compact-router (or the flagship) to handle, untouched.
+This avoids double-summarizing a request that is already a summarization
+request: context-watchdog only ever acts on ordinary, over-threshold
+`/v1/messages` traffic.
+
+### The fallback guarantee
+
+Any failure in the summarize step (cheap-model error, empty summary) falls
+back to forwarding the **original** request unchanged — a turn never
+breaks, it just runs once at full price. The same passthrough applies when
+the request is under threshold, or when no safe cut of the history exists
+(nothing to compact safely): both cases pass through untouched, no
+rewriting attempted.
 
 ## Commands
 

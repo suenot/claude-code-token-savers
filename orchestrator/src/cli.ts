@@ -1,27 +1,28 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { execSync } from 'node:child_process';
-import { loadConfig } from './config.js';
-import { plan } from './planner.js';
-import { up } from './supervisor.js';
-import { mintToken } from './router-bootstrap.js';
-import { runClaude } from './launcher.js';
-import { REGISTRY } from './registry.js';
+import { loadConfig } from './config.ts';
+import { plan } from './planner.ts';
+import { up } from './supervisor.ts';
+import { mintToken } from './router-bootstrap.ts';
+import { runClaude } from './launcher.ts';
+import { REGISTRY } from './registry.ts';
+import type { PlanResult, PlannedStage, ChainHandle } from './types.ts';
 
-const INSTALL_HINT = {
+const INSTALL_HINT: Record<string, string> = {
   pxpipe: 'npm i -g pxpipe-proxy',
   headroom: 'uv tool install "headroom-ai[proxy]"',
   router: 'cargo install link-assistant-router  (or: docker pull konard/link-assistant-router — repo: https://github.com/link-assistant/router)',
 };
 
-function version() {
+function version(): string {
   const pkg = JSON.parse(
     readFileSync(fileURLToPath(new URL('../package.json', import.meta.url)), 'utf8'),
   );
   return pkg.version;
 }
 
-export function splitClaudeArgs(argv) {
+export function splitClaudeArgs(argv: string[]): string[] {
   // Everything after `run` is forwarded to claude (a leading `--` separator is
   // dropped if present). `--dangerously-skip-permissions` is always applied so a
   // shuba-launched claude never stops for permission prompts; deduped if the user
@@ -36,36 +37,36 @@ export function splitClaudeArgs(argv) {
   return args.filter((a, i) => args.indexOf(a) === i);
 }
 
-function routerRootFromChain(chain) {
+function routerRootFromChain(chain: PlannedStage[]): string | null {
   const r = chain.find((s) => s.id === 'router');
   return r ? `http://127.0.0.1:${r.port}` : null;
 }
 
-async function doRun(argv) {
+async function doRun(argv: string[]): Promise<number> {
   const { config, created } = loadConfig();
   if (created) console.error('shuba: wrote default config to ~/.shuba/chain.json');
-  const result = plan(config);
+  const result: PlanResult = plan(config);
   if (!result.ok) {
     console.error('shuba: invalid chain:\n  - ' + result.errors.join('\n  - '));
     return 1;
   }
-  const handle = await up(result.chain);
+  const handle: ChainHandle = await up(result.chain);
   try {
     let apiKey;
     if (result.head.requiresToken) {
-      apiKey = await mintToken(routerRootFromChain(result.chain));
+      apiKey = await mintToken(routerRootFromChain(result.chain) as string);
     }
     console.error('shuba: chain up →', result.chain.map((s) => `${s.id}:${s.port}`).join(' → '));
     const child = runClaude(result.head, { apiKey, claudeArgs: splitClaudeArgs(argv) });
     return await new Promise((resolve) => {
       let settled = false;
-      const finish = async (code) => {
+      const finish = async (code: number | null | undefined) => {
         if (settled) return;
         settled = true;
         await handle.down();
         resolve(code ?? 0);
       };
-      for (const sig of ['SIGINT', 'SIGTERM']) {
+      for (const sig of ['SIGINT', 'SIGTERM'] as const) {
         process.on(sig, () => finish(0));
       }
       child.on('exit', (code) => finish(code));
@@ -80,17 +81,17 @@ async function doRun(argv) {
   }
 }
 
-async function doUp() {
+async function doUp(): Promise<number> {
   const { config } = loadConfig();
-  const result = plan(config);
+  const result: PlanResult = plan(config);
   if (!result.ok) {
     console.error('shuba: invalid chain:\n  - ' + result.errors.join('\n  - '));
     return 1;
   }
-  const handle = await up(result.chain);
+  const handle: ChainHandle = await up(result.chain);
   console.error('shuba: chain up:', JSON.stringify(handle.status()));
   console.error('shuba: Ctrl-C to tear down.');
-  for (const sig of ['SIGINT', 'SIGTERM']) {
+  for (const sig of ['SIGINT', 'SIGTERM'] as const) {
     process.on(sig, async () => {
       await handle.down();
       process.exit(0);
@@ -100,7 +101,7 @@ async function doUp() {
   return 0;
 }
 
-function which(bin) {
+function which(bin: string): boolean {
   try {
     execSync(`command -v ${bin}`, { stdio: 'ignore' });
     return true;
@@ -109,14 +110,14 @@ function which(bin) {
   }
 }
 
-async function doDoctor() {
+async function doDoctor(): Promise<number> {
   for (const id of Object.keys(REGISTRY)) {
     const bin = REGISTRY[id].bin;
     const ok = which(bin);
     console.log(`${ok ? 'ok ' : 'MISSING'}  ${id} (${bin})${ok ? '' : '  → ' + INSTALL_HINT[id]}`);
   }
   const { config } = loadConfig();
-  const result = plan(config);
+  const result: PlanResult = plan(config);
   if (result.ok) {
     console.log('\nplan: ' + result.chain.map((s) => `${s.id}:${s.port}`).join(' → '));
     console.log('head: ' + result.head.baseUrl + (result.head.requiresToken ? '  (router token)' : ''));
@@ -126,7 +127,7 @@ async function doDoctor() {
   return 0;
 }
 
-export async function cli(argv) {
+export async function cli(argv: string[]): Promise<number> {
   const cmd = argv[0];
   if (cmd === '--version' || cmd === '-v') {
     console.log(version());

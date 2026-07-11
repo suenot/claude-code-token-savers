@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { splitClaudeArgs } from '../src/cli.js';
+import { splitClaudeArgs } from '../src/cli.ts';
 
 test('always applies --dangerously-skip-permissions on bare run', () => {
   assert.deepEqual(splitClaudeArgs(['run']), ['--dangerously-skip-permissions']);

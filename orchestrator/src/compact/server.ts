@@ -2,6 +2,7 @@ import { createServer, type IncomingMessage, type Server, type ServerResponse } 
 import { Readable } from 'node:stream';
 import { isCompactRequest } from './matcher.ts';
 import { anthropicToOpenAI, openAIMessageToAnthropic, anthropicSSEChunks, mapStopReason } from './translate.ts';
+import { appendReqLog, summarizeBody } from '../control/reqlog.ts';
 
 export function createInterceptor({ port, upstream, model, baseUrl, apiKey, fetchImpl = fetch }: {
   port: number;
@@ -13,7 +14,7 @@ export function createInterceptor({ port, upstream, model, baseUrl, apiKey, fetc
 }): Server {
   const log = (...a: string[]) => process.stderr.write(`[compact-router] ${a.join(' ')}\n`);
 
-  async function passthrough(req: IncomingMessage, raw: Buffer, res: ServerResponse) {
+  async function passthrough(req: IncomingMessage, raw: Buffer, res: ServerResponse): Promise<number> {
     const headers: Record<string, any> = { ...req.headers };
     delete headers.host; delete headers['content-length']; delete headers['accept-encoding'];
     const up = await fetchImpl(upstream + req.url, { method: req.method, headers, body: raw.length ? raw : undefined } as RequestInit);
@@ -25,6 +26,7 @@ export function createInterceptor({ port, upstream, model, baseUrl, apiKey, fetc
       stream.on('error', () => { try { res.destroy(); } catch { /* already closed */ } });
       stream.pipe(res);
     } else res.end();
+    return up.status || 200;
   }
 
   async function serveCompact(body: any, res: ServerResponse) {
@@ -73,19 +75,38 @@ export function createInterceptor({ port, upstream, model, baseUrl, apiKey, fetc
       const isMessages = req.method === 'POST' && !!req.url && req.url.includes('/v1/messages') && !req.url.includes('count_tokens');
       let body: any = null;
       if (isMessages) { try { body = JSON.parse(raw.toString('utf8')); } catch { body = null; } }
+      const start = Date.now();
+      const summary = isMessages ? summarizeBody(raw) : undefined;
+      function logReq(action: 'intercept' | 'passthrough', upstreamStatus?: number) {
+        try {
+          appendReqLog({
+            ts: new Date().toISOString(),
+            stage: 'compact-router',
+            method: req.method || 'POST',
+            path: req.url || '',
+            action,
+            upstreamStatus,
+            durationMs: Date.now() - start,
+            ...summary,
+          });
+        } catch { /* logging must never affect the response path */ }
+      }
       try {
         if (body && isCompactRequest(body)) {
           try {
             await serveCompact(body, res);
             log('intercepted', model);
+            logReq('intercept');
             return;
           } catch (e: any) {
             log('fallback', e.message);
-            await passthrough(req, raw, res);
+            const status = await passthrough(req, raw, res);
+            logReq('passthrough', status);
             return;
           }
         }
-        await passthrough(req, raw, res);
+        const status = await passthrough(req, raw, res);
+        logReq('passthrough', status);
       } catch (e: any) {
         if (!res.headersSent) res.writeHead(502);
         res.end('compact-router error: ' + e.message);

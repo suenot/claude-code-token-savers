@@ -1,5 +1,6 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import { Readable } from 'node:stream';
+import { appendReqLog, summarizeBody } from '../control/reqlog.ts';
 
 // A pure passthrough proxy that paces outbound requests to a steady rate so a
 // bursty client (e.g. Claude Code retrying on overload) cannot machine-gun the
@@ -87,7 +88,7 @@ export function createRateLimiter({
   const log = (...a: string[]) => process.stderr.write(`[rate-limiter] ${a.join(' ')}\n`);
   const gate = createGate({ rps, burst, now, sleep });
 
-  async function forward(req: IncomingMessage, bodyBuf: Buffer, res: ServerResponse) {
+  async function forward(req: IncomingMessage, bodyBuf: Buffer, res: ServerResponse): Promise<number> {
     const headers: Record<string, any> = { ...req.headers };
     delete headers.host; delete headers['content-length']; delete headers['accept-encoding'];
     const up = await fetchImpl(upstream + req.url, {
@@ -110,6 +111,7 @@ export function createRateLimiter({
     } else {
       res.end();
     }
+    return up.status || 200;
   }
 
   const server = createServer((req, res) => {
@@ -122,9 +124,24 @@ export function createRateLimiter({
     req.on('data', (c) => chunks.push(c));
     req.on('end', async () => {
       const raw = Buffer.concat(chunks);
+      const isMessages = req.method === 'POST' && !!req.url && req.url.includes('/v1/messages');
+      const summary = isMessages ? summarizeBody(raw) : undefined;
       try {
         await gate.acquire();
-        await forward(req, raw, res);
+        const start = Date.now();
+        const status = await forward(req, raw, res);
+        try {
+          appendReqLog({
+            ts: new Date().toISOString(),
+            stage: 'rate-limiter',
+            method: req.method || 'POST',
+            path: req.url || '',
+            action: 'forward',
+            upstreamStatus: status,
+            durationMs: Date.now() - start,
+            ...summary,
+          });
+        } catch { /* logging must never affect the response path */ }
       } catch (e: any) {
         if (!res.headersSent) res.writeHead(502);
         res.end('rate-limiter error: ' + e.message);

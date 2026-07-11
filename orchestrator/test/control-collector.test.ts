@@ -4,6 +4,7 @@ import { mkdtemp, writeFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createCollector } from '../src/control/collector.ts';
+import { appendReqLog } from '../src/control/reqlog.ts';
 
 function fetchStub(map: Record<string, { ok: boolean; body?: unknown } | 'throw'>): typeof fetch {
   return (async (input: any) => {
@@ -190,6 +191,61 @@ test('stats() counts only recent events within the tail cap for a file larger th
     assert.ok(typeof stats.totals.events === 'number');
     assert.ok(stats.totals.events! > 0);
     assert.ok(stats.totals.events! < count, 'tail-capped count should be less than the full file line count');
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test('hopLog() merges pxpipe entries and per-hop reqlog entries, tagged with source', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'shuba-collector-hoplog-'));
+  const eventsPath = join(dir, 'events.jsonl');
+  const reqlogPath = join(dir, 'requests.jsonl');
+  try {
+    await writeFile(
+      eventsPath,
+      [JSON.stringify({ timestamp: '2024-01-01T00:00:00.000Z', kind: 'pxpipe-entry' })].join('\n') + '\n',
+    );
+    appendReqLog(
+      {
+        ts: '2024-01-02T00:00:00.000Z',
+        stage: 'rate-limiter',
+        method: 'POST',
+        path: '/v1/messages',
+        action: 'forward',
+        upstreamStatus: 200,
+      },
+      { path: reqlogPath },
+    );
+    appendReqLog(
+      {
+        ts: '2024-01-03T00:00:00.000Z',
+        stage: 'compact-router',
+        method: 'POST',
+        path: '/v1/messages',
+        action: 'intercept',
+      },
+      { path: reqlogPath },
+    );
+
+    const prevReqLog = process.env.SHUBA_REQLOG;
+    process.env.SHUBA_REQLOG = reqlogPath;
+    try {
+      const collector = createCollector({ pxpipeEventsPath: eventsPath });
+      const merged = await collector.hopLog(10) as Array<Record<string, unknown>>;
+      const pxpipeEntry = merged.find((e) => e.kind === 'pxpipe-entry');
+      const rateLimiterEntry = merged.find((e) => e.stage === 'rate-limiter');
+      const compactEntry = merged.find((e) => e.stage === 'compact-router');
+      assert.equal(pxpipeEntry?.source, 'pxpipe');
+      assert.equal(rateLimiterEntry?.source, 'rate-limiter');
+      assert.equal(compactEntry?.source, 'compact-router');
+      // newest-first by timestamp: compact-router (01-03) before rate-limiter (01-02) before pxpipe (01-01)
+      const order = merged.map((e) => e.source);
+      assert.ok(order.indexOf('compact-router') < order.indexOf('rate-limiter'));
+      assert.ok(order.indexOf('rate-limiter') < order.indexOf('pxpipe'));
+    } finally {
+      if (prevReqLog === undefined) delete process.env.SHUBA_REQLOG;
+      else process.env.SHUBA_REQLOG = prevReqLog;
+    }
   } finally {
     await rm(dir, { recursive: true, force: true });
   }

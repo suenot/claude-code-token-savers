@@ -1,4 +1,5 @@
 import { open, stat } from 'node:fs/promises';
+import { readReqLog } from './reqlog.ts';
 
 export type ChainStage = { id: string; port: number; healthUrl: string };
 
@@ -21,6 +22,7 @@ export type Collector = {
   chain(): Promise<ChainEntry[]>;
   stats(): Promise<StatsResult>;
   recentRequests(limit?: number): Promise<unknown[]>;
+  hopLog(limit?: number): Promise<unknown[]>;
 };
 
 // createCollector builds a runtime-agnostic (file + fetch only) collector
@@ -167,5 +169,40 @@ export function createCollector(opts: CollectorOpts): Collector {
     return entries.slice(-limit).reverse();
   }
 
-  return { chain, stats, recentRequests };
+  // hopLog merges two request sources into one newest-first feed for the
+  // console's "what actually went out" view:
+  //  - pxpipe-derived entries (same source as recentRequests), tagged
+  //    `source: 'pxpipe'`
+  //  - per-hop reqlog entries (src/control/reqlog.ts), tagged with the
+  //    entry's own `stage` (e.g. 'compact-router', 'context-watchdog',
+  //    'rate-limiter') as `source`
+  // This is additive: recentRequests()'s existing shape/behavior (used by
+  // existing console code and tests) is untouched; hopLog is a new,
+  // separate accessor so nothing that already depends on recentRequests's
+  // plain pxpipe-only shape can break.
+  function extractTimestampMs(entry: unknown): number {
+    if (!entry || typeof entry !== 'object') return 0;
+    const rec = entry as Record<string, unknown>;
+    const candidate = rec.ts ?? rec.timestamp;
+    if (typeof candidate === 'number') return candidate;
+    if (typeof candidate === 'string') {
+      const parsed = Date.parse(candidate);
+      if (!Number.isNaN(parsed)) return parsed;
+    }
+    return 0;
+  }
+
+  async function hopLog(limit = 100): Promise<unknown[]> {
+    const pxpipeEntries = await recentRequests(limit);
+    const tagged: unknown[] = [
+      ...pxpipeEntries.map((e) =>
+        e && typeof e === 'object' ? { ...(e as Record<string, unknown>), source: 'pxpipe' } : e,
+      ),
+      ...readReqLog({ limit }).map((e) => ({ ...e, source: e.stage })),
+    ];
+    tagged.sort((a, b) => extractTimestampMs(b) - extractTimestampMs(a));
+    return tagged.slice(0, limit);
+  }
+
+  return { chain, stats, recentRequests, hopLog };
 }

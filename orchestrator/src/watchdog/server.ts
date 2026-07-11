@@ -5,6 +5,7 @@ import { anthropicToOpenAI } from '../compact/translate.ts';
 import { estimateTokens } from './estimate.ts';
 import { planCut } from './cut.ts';
 import { summaryKey, buildRewrittenBody } from './rewrite.ts';
+import { appendReqLog, summarizeBody } from '../control/reqlog.ts';
 
 const SUMMARIZE_PROMPT =
   'Summarize the conversation above in detail — decisions, code, file paths, current ' +
@@ -26,7 +27,7 @@ export function createWatchdog({ port, upstream, model, baseUrl, apiKey, thresho
 }): Server {
   const log = (...a: string[]) => process.stderr.write(`[context-watchdog] ${a.join(' ')}\n`);
 
-  async function forward(req: IncomingMessage, bodyBuf: Buffer, res: ServerResponse) {
+  async function forward(req: IncomingMessage, bodyBuf: Buffer, res: ServerResponse): Promise<number> {
     const headers: Record<string, any> = { ...req.headers };
     delete headers.host; delete headers['content-length']; delete headers['accept-encoding'];
     const up = await fetchImpl(upstream + req.url, { method: req.method, headers, body: bodyBuf.length ? bodyBuf : undefined } as RequestInit);
@@ -40,6 +41,7 @@ export function createWatchdog({ port, upstream, model, baseUrl, apiKey, thresho
     } else {
       res.end();
     }
+    return up.status || 200;
   }
 
   async function summarize(older: any[], system: any) {
@@ -103,6 +105,22 @@ export function createWatchdog({ port, upstream, model, baseUrl, apiKey, thresho
       const isMessages = req.method === 'POST' && !!req.url && req.url.includes('/v1/messages') && !req.url.includes('count_tokens');
       let body: any = null;
       if (isMessages) { try { body = JSON.parse(raw.toString('utf8')); } catch { body = null; } }
+      const start = Date.now();
+      const summary = isMessages ? summarizeBody(raw) : undefined;
+      function logReq(action: 'summarize' | 'forward', upstreamStatus?: number) {
+        try {
+          appendReqLog({
+            ts: new Date().toISOString(),
+            stage: 'context-watchdog',
+            method: req.method || 'POST',
+            path: req.url || '',
+            action,
+            upstreamStatus,
+            durationMs: Date.now() - start,
+            ...summary,
+          });
+        } catch { /* logging must never affect the response path */ }
+      }
       try {
         if (body && !isCompactRequest(body) && estimateTokens(body) > thresholdTokens) {
           try {
@@ -110,16 +128,19 @@ export function createWatchdog({ port, upstream, model, baseUrl, apiKey, thresho
             if (r) {
               const tail = (body.messages || []).slice(r.cut);
               const rewritten = buildRewrittenBody(body, tail, r.summary);
-              await forward(req, Buffer.from(JSON.stringify(rewritten)), res);
+              const status = await forward(req, Buffer.from(JSON.stringify(rewritten)), res);
+              logReq('summarize', status);
               return;
             }
           } catch (e: any) {
             log('fallback', e.message);
-            await forward(req, raw, res);
+            const status = await forward(req, raw, res);
+            logReq('forward', status);
             return;
           }
         }
-        await forward(req, raw, res);
+        const status = await forward(req, raw, res);
+        logReq('forward', status);
       } catch (e: any) {
         if (!res.headersSent) res.writeHead(502);
         res.end('context-watchdog error: ' + e.message);

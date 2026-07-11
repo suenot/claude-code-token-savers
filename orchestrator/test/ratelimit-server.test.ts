@@ -1,7 +1,11 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { once } from 'node:events';
+import { mkdtempSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { createGate, retryAfterMs, createRateLimiter } from '../src/ratelimit/server.ts';
+import { readReqLog } from '../src/control/reqlog.ts';
 
 // A controllable clock: now() reads `clock`, sleep(ms) advances it synchronously
 // so gate timing is deterministic without wall-clock waits.
@@ -57,6 +61,27 @@ test('forwards to upstream and returns status', async () => {
     assert.equal(r.status, 200);
     assert.ok(calls[0].includes('upstream.test/v1/messages'));
   });
+});
+
+test('forwarded request appends a rate-limiter reqlog entry with upstreamStatus', async () => {
+  const prevReqLog = process.env.SHUBA_REQLOG;
+  const dir = mkdtempSync(join(tmpdir(), 'shuba-ratelimit-reqlog-'));
+  process.env.SHUBA_REQLOG = join(dir, 'requests.jsonl');
+  try {
+    const fetchImpl = async () => ({ status: 200, headers: new Headers(), body: null });
+    await withServer({ fetchImpl }, async (base) => {
+      const r = await fetch(`${base}/v1/messages`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' });
+      assert.equal(r.status, 200);
+    });
+    const entries = readReqLog();
+    const entry = entries.find((e) => e.stage === 'rate-limiter');
+    assert.ok(entry, 'expected a rate-limiter reqlog entry');
+    assert.equal(entry!.action, 'forward');
+    assert.equal(typeof entry!.upstreamStatus, 'number');
+  } finally {
+    if (prevReqLog === undefined) delete process.env.SHUBA_REQLOG;
+    else process.env.SHUBA_REQLOG = prevReqLog;
+  }
 });
 
 test('upstream 429 triggers a global cooldown honoring Retry-After', async () => {

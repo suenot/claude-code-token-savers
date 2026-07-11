@@ -1,10 +1,11 @@
 import { fileURLToPath } from 'node:url';
+import type { StageDescriptor, BuildContext, BuildResult } from './types.ts';
 
 const COMPACT_BIN = fileURLToPath(new URL('../bin/compact-interceptor.js', import.meta.url));
 const WATCHDOG_BIN = fileURLToPath(new URL('../bin/context-watchdog.js', import.meta.url));
 const RATELIMIT_BIN = fileURLToPath(new URL('../bin/rate-limiter.js', import.meta.url));
 
-export const REGISTRY = {
+export const REGISTRY: Record<string, StageDescriptor> = {
   pxpipe: {
     id: 'pxpipe',
     bin: 'pxpipe',
@@ -13,8 +14,8 @@ export const REGISTRY = {
     terminal: false,
     readerConstraint: 'fable-only',
     healthPath: '/',
-    build({ port, upstreamBase }) {
-      return { args: [], env: { PORT: String(port), ANTHROPIC_UPSTREAM: upstreamBase } };
+    build({ port, upstreamBase }: BuildContext): BuildResult {
+      return { args: [], env: { PORT: String(port), ANTHROPIC_UPSTREAM: upstreamBase as string } };
     },
   },
   headroom: {
@@ -24,10 +25,10 @@ export const REGISTRY = {
     dialect: 'anthropic',
     terminal: false,
     healthPath: '/health',
-    build({ port, upstreamBase }) {
+    build({ port, upstreamBase }: BuildContext): BuildResult {
       return {
         args: ['proxy', '--port', String(port)],
-        env: { ANTHROPIC_TARGET_API_URL: upstreamBase },
+        env: { ANTHROPIC_TARGET_API_URL: upstreamBase as string },
       };
     },
   },
@@ -40,8 +41,8 @@ export const REGISTRY = {
     requiresToken: true,
     healthPath: '/health',
     clientPathSuffix: '/api/latest/anthropic',
-    build({ port, provider }) {
-      return { args: [], env: { ROUTER_PORT: String(port), UPSTREAM_PROVIDER: provider } };
+    build({ port, provider }: BuildContext): BuildResult {
+      return { args: [], env: { ROUTER_PORT: String(port), UPSTREAM_PROVIDER: provider as string } };
     },
   },
   'compact-router': {
@@ -52,13 +53,13 @@ export const REGISTRY = {
     dialect: 'anthropic',
     terminal: false,
     healthPath: '/health',
-    build({ port, upstreamBase, config }) {
+    build({ port, upstreamBase, config }: BuildContext): BuildResult {
       const c = (config && config.compactRouter) || {};
       return {
         args: [COMPACT_BIN],
         env: {
           PORT: String(port),
-          COMPACT_UPSTREAM: upstreamBase,
+          COMPACT_UPSTREAM: upstreamBase as string,
           COMPACT_MODEL: c.model || 'deepseek/deepseek-v4-flash',
           COMPACT_BASE_URL: c.baseUrl || 'https://openrouter.ai/api/v1',
           COMPACT_ENV_KEY: c.envKey || 'OPENROUTER_API_KEY',
@@ -74,13 +75,13 @@ export const REGISTRY = {
     dialect: 'anthropic',
     terminal: false,
     healthPath: '/health',
-    build({ port, upstreamBase, config }) {
+    build({ port, upstreamBase, config }: BuildContext): BuildResult {
       const c = (config && config.rateLimiter) || {};
       return {
         args: [RATELIMIT_BIN],
         env: {
           PORT: String(port),
-          RATELIMIT_UPSTREAM: upstreamBase,
+          RATELIMIT_UPSTREAM: upstreamBase as string,
           RATELIMIT_RPS: String(c.rps ?? 2),
           RATELIMIT_BURST: String(c.burst ?? 5),
           RATELIMIT_COOLDOWN_MS: String(c.cooldownMs ?? 5000),
@@ -96,13 +97,13 @@ export const REGISTRY = {
     dialect: 'anthropic',
     terminal: false,
     healthPath: '/health',
-    build({ port, upstreamBase, config }) {
+    build({ port, upstreamBase, config }: BuildContext): BuildResult {
       const c = (config && config.contextWatchdog) || {};
       return {
         args: [WATCHDOG_BIN],
         env: {
           PORT: String(port),
-          WATCHDOG_UPSTREAM: upstreamBase,
+          WATCHDOG_UPSTREAM: upstreamBase as string,
           WATCHDOG_MODEL: c.model || 'deepseek/deepseek-v4-flash',
           WATCHDOG_BASE_URL: c.baseUrl || 'https://openrouter.ai/api/v1',
           WATCHDOG_ENV_KEY: c.envKey || 'OPENROUTER_API_KEY',

@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { REGISTRY } from '../src/registry.js';
+import { REGISTRY } from '../src/registry.ts';
+import type { Config } from '../src/types.ts';
 
 test('pxpipe descriptor wires PORT and ANTHROPIC_UPSTREAM', () => {
   const d = REGISTRY.pxpipe;
@@ -40,7 +41,7 @@ test('compact-router is a builtin node stage wired from config', () => {
   assert.equal(d.bin, process.execPath);
   const { args, env } = d.build({
     port: 47850, upstreamBase: 'http://127.0.0.1:8787',
-    config: { compactRouter: { model: 'deepseek/deepseek-v4-flash' } },
+    config: { compactRouter: { model: 'deepseek/deepseek-v4-flash' } } as Config,
   });
   assert.match(args[0], /bin\/compact-interceptor\.js$/);
   assert.equal(env.PORT, '47850');
@@ -63,7 +64,7 @@ test('context-watchdog builtin wires threshold/tail/model from config', () => {
   assert.equal(d.bin, process.execPath);
   const { args, env } = d.build({
     port: 47851, upstreamBase: 'http://127.0.0.1:8787',
-    config: { contextWatchdog: { thresholdTokens: 250000, tailTurns: 8 } },
+    config: { contextWatchdog: { thresholdTokens: 250000, tailTurns: 8 } } as Config,
   });
   assert.match(args[0], /bin\/context-watchdog\.js$/);
   assert.equal(env.PORT, '47851');

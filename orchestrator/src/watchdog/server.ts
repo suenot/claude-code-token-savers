@@ -6,6 +6,9 @@ import { estimateTokens } from './estimate.ts';
 import { planCut } from './cut.ts';
 import { summaryKey, buildRewrittenBody } from './rewrite.ts';
 import { appendReqLog, summarizeBody } from '../control/reqlog.ts';
+import { isStageEnabled } from '../control/toggles.ts';
+
+const STAGE_ID = 'context-watchdog';
 
 const SUMMARIZE_PROMPT =
   'Summarize the conversation above in detail — decisions, code, file paths, current ' +
@@ -122,7 +125,7 @@ export function createWatchdog({ port, upstream, model, baseUrl, apiKey, thresho
         } catch { /* logging must never affect the response path */ }
       }
       try {
-        if (body && !isCompactRequest(body) && estimateTokens(body) > thresholdTokens) {
+        if (isStageEnabled(STAGE_ID) && body && !isCompactRequest(body) && estimateTokens(body) > thresholdTokens) {
           try {
             const r = await resolve(body);
             if (r) {

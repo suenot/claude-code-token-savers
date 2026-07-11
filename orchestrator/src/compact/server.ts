@@ -3,6 +3,9 @@ import { Readable } from 'node:stream';
 import { isCompactRequest } from './matcher.ts';
 import { anthropicToOpenAI, openAIMessageToAnthropic, anthropicSSEChunks, mapStopReason } from './translate.ts';
 import { appendReqLog, summarizeBody } from '../control/reqlog.ts';
+import { isStageEnabled } from '../control/toggles.ts';
+
+const STAGE_ID = 'compact-router';
 
 export function createInterceptor({ port, upstream, model, baseUrl, apiKey, fetchImpl = fetch }: {
   port: number;
@@ -92,7 +95,7 @@ export function createInterceptor({ port, upstream, model, baseUrl, apiKey, fetc
         } catch { /* logging must never affect the response path */ }
       }
       try {
-        if (body && isCompactRequest(body)) {
+        if (isStageEnabled(STAGE_ID) && body && isCompactRequest(body)) {
           try {
             await serveCompact(body, res);
             log('intercepted', model);

@@ -1,6 +1,9 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import { Readable } from 'node:stream';
 import { appendReqLog, summarizeBody } from '../control/reqlog.ts';
+import { isStageEnabled } from '../control/toggles.ts';
+
+const STAGE_ID = 'rate-limiter';
 
 // A pure passthrough proxy that paces outbound requests to a steady rate so a
 // bursty client (e.g. Claude Code retrying on overload) cannot machine-gun the
@@ -88,7 +91,7 @@ export function createRateLimiter({
   const log = (...a: string[]) => process.stderr.write(`[rate-limiter] ${a.join(' ')}\n`);
   const gate = createGate({ rps, burst, now, sleep });
 
-  async function forward(req: IncomingMessage, bodyBuf: Buffer, res: ServerResponse): Promise<number> {
+  async function forward(req: IncomingMessage, bodyBuf: Buffer, res: ServerResponse, penalizeOn429 = true): Promise<number> {
     const headers: Record<string, any> = { ...req.headers };
     delete headers.host; delete headers['content-length']; delete headers['accept-encoding'];
     const up = await fetchImpl(upstream + req.url, {
@@ -96,7 +99,7 @@ export function createRateLimiter({
       headers,
       body: bodyBuf.length ? bodyBuf : undefined,
     } as RequestInit);
-    if (up.status === 429) {
+    if (up.status === 429 && penalizeOn429) {
       const cooldown = retryAfterMs(up.headers && up.headers.get ? up.headers.get('retry-after') : null, default429CooldownMs);
       gate.penalize(cooldown);
       log('upstream 429 — pausing queue', `${cooldown}ms`);
@@ -126,10 +129,11 @@ export function createRateLimiter({
       const raw = Buffer.concat(chunks);
       const isMessages = req.method === 'POST' && !!req.url && req.url.includes('/v1/messages');
       const summary = isMessages ? summarizeBody(raw) : undefined;
+      const enabled = isStageEnabled(STAGE_ID);
       try {
-        await gate.acquire();
+        if (enabled) await gate.acquire();
         const start = Date.now();
-        const status = await forward(req, raw, res);
+        const status = await forward(req, raw, res, enabled);
         try {
           appendReqLog({
             ts: new Date().toISOString(),

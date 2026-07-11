@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { once } from 'node:events';
-import { mkdtempSync } from 'node:fs';
+import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createGate, retryAfterMs, createRateLimiter } from '../src/ratelimit/server.ts';
@@ -96,6 +96,26 @@ test('upstream 429 triggers a global cooldown honoring Retry-After', async () =>
     assert.ok(c.value >= 7000, `expected cooldown >=7000ms, got ${c.value}`);
     penalties.push(c.value);
   });
+});
+
+test('with the rate-limiter toggle OFF, an upstream 429 does not pause the queue', async () => {
+  const prevRuntime = process.env.SHUBA_RUNTIME;
+  const dir = mkdtempSync(join(tmpdir(), 'shuba-ratelimit-toggle-'));
+  process.env.SHUBA_RUNTIME = join(dir, 'runtime.json');
+  writeFileSync(process.env.SHUBA_RUNTIME, JSON.stringify({ 'rate-limiter': false }));
+  try {
+    const c = fakeClock();
+    const fetchImpl = async () => ({ status: 429, headers: new Headers({ 'retry-after': '7' }), body: null });
+    await withServer({ fetchImpl, now: c.now, sleep: c.sleep, rps: 1000, burst: 1000 }, async (base) => {
+      const r = await fetch(`${base}/v1/messages`, { method: 'POST', body: '{}' });
+      assert.equal(r.status, 429);
+      await fetch(`${base}/v1/messages`, { method: 'POST', body: '{}' });
+      assert.equal(c.value, 0, `expected no pacing/cooldown while disabled, got ${c.value}`);
+    });
+  } finally {
+    if (prevRuntime === undefined) delete process.env.SHUBA_RUNTIME;
+    else process.env.SHUBA_RUNTIME = prevRuntime;
+  }
 });
 
 test('health endpoint responds without gating', async () => {

@@ -1,6 +1,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { once } from 'node:events';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { createInterceptor } from '../src/compact/server.ts';
 
 const compactBody = (stream: boolean) => ({
@@ -105,6 +108,33 @@ test('count_tokens path is passed through, never intercepted', async () => {
     assert.ok(calls.every((u) => u.includes('upstream.test')));
     assert.ok(!calls.some((u) => u.includes('ext.test')));
   });
+});
+
+test('with the compact-router toggle OFF, a compact-fingerprinted request passes through instead of being intercepted', async () => {
+  const prevRuntime = process.env.SHUBA_RUNTIME;
+  const dir = mkdtempSync(join(tmpdir(), 'shuba-compact-toggle-'));
+  process.env.SHUBA_RUNTIME = join(dir, 'runtime.json');
+  writeFileSync(process.env.SHUBA_RUNTIME, JSON.stringify({ 'compact-router': false }));
+  try {
+    const calls: string[] = [];
+    const fetchImpl = async (url: string) => {
+      calls.push(url);
+      return { ok: true, status: 200, headers: new Headers(), body: null };
+    };
+    await withServer(fetchImpl, async (base: string) => {
+      const r = await fetch(`${base}/v1/messages`, {
+        method: 'POST', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(compactBody(false)),
+      });
+      assert.equal(r.status, 200);
+      assert.ok(calls.every((u) => u.includes('upstream.test')), 'only upstream called');
+      assert.ok(!calls.some((u) => u.includes('ext.test')), 'external never called while disabled');
+    });
+  } finally {
+    if (prevRuntime === undefined) delete process.env.SHUBA_RUNTIME;
+    else process.env.SHUBA_RUNTIME = prevRuntime;
+    rmSync(dir, { recursive: true, force: true });
+  }
 });
 
 test('non-compact request passes through to upstream', async () => {

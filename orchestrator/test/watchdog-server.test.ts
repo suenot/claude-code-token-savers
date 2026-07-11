@@ -1,6 +1,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { once } from 'node:events';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { createWatchdog } from '../src/watchdog/server.ts';
 
 // build an over-threshold body: many chars so estimateTokens > threshold(=10)
@@ -98,6 +101,31 @@ test('tail regrowing past threshold advances the cut (re-summarize)', async () =
     await fetch(`${base}/v1/messages`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(grown) });
     assert.equal(extCalls.length, 2);
   });
+});
+
+test('with the context-watchdog toggle OFF, an over-threshold request is forwarded unsummarized', async () => {
+  const prevRuntime = process.env.SHUBA_RUNTIME;
+  const dir = mkdtempSync(join(tmpdir(), 'shuba-watchdog-toggle-'));
+  process.env.SHUBA_RUNTIME = join(dir, 'runtime.json');
+  writeFileSync(process.env.SHUBA_RUNTIME, JSON.stringify({ 'context-watchdog': false }));
+  try {
+    const extCalls: number[] = []; let forwardedBody: any = null;
+    const fetchImpl = async (url: string, opts?: any) => {
+      if (url.includes('ext.test')) { extCalls.push(1); return { ok: true, json: async () => ({ choices: [{ message: { content: 'SUM' } }] }) }; }
+      forwardedBody = JSON.parse(opts.body);
+      return { ok: true, status: 200, headers: new Headers(), body: null };
+    };
+    await withServer({ fetchImpl }, async (base: string) => {
+      await fetch(`${base}/v1/messages`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(overBody()) });
+      assert.equal(extCalls.length, 0, 'never summarizes while disabled');
+      assert.equal(forwardedBody.messages.length, 6, 'forwards the original body unrewritten');
+      assert.equal(forwardedBody.messages[0].content, big);
+    });
+  } finally {
+    if (prevRuntime === undefined) delete process.env.SHUBA_RUNTIME;
+    else process.env.SHUBA_RUNTIME = prevRuntime;
+    rmSync(dir, { recursive: true, force: true });
+  }
 });
 
 test('summarize failure forwards the ORIGINAL body', async () => {

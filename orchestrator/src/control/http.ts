@@ -3,6 +3,8 @@ import { readFile } from 'node:fs/promises';
 import { extname, join, normalize } from 'node:path';
 import { createHash } from 'node:crypto';
 import type { DelegateInput, JobStatus } from './types.ts';
+import { isStageEnabled, persistToggle, runtimePath, setToggle } from './toggles.ts';
+import { configPath } from '../config.ts';
 
 type Engine = {
   delegate(input: DelegateInput): Promise<{ job_id: string; harness_chosen: string; model_chosen: string }>;
@@ -91,6 +93,26 @@ function isLoopbackOrigin(origin: string): boolean {
   }
 }
 
+// Known shuba chain stages exposed via GET/POST /api/toggles. Our own stages
+// (compact-router, context-watchdog, rate-limiter) honor the toggle live, on
+// the next proxied request — no restart needed. pxpipe/headroom are
+// third-party stages wired into the process tree at startup, so flipping
+// their toggle only takes effect after a restart.
+const KNOWN_STAGES = ['compact-router', 'context-watchdog', 'headroom', 'pxpipe', 'rate-limiter'] as const;
+type KnownStage = (typeof KNOWN_STAGES)[number];
+const LIVE_STAGES = new Set<string>(['compact-router', 'context-watchdog', 'rate-limiter']);
+
+function isKnownStage(value: unknown): value is KnownStage {
+  return typeof value === 'string' && (KNOWN_STAGES as readonly string[]).includes(value);
+}
+
+function togglesView(togglesPath: string): Array<{ id: string; enabled: boolean; live: boolean; restartRequired: boolean }> {
+  return KNOWN_STAGES.map((id) => {
+    const live = LIVE_STAGES.has(id);
+    return { id, enabled: isStageEnabled(id, togglesPath), live, restartRequired: !live };
+  });
+}
+
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
   const data = JSON.stringify(body);
   res.writeHead(status, { 'content-type': 'application/json; charset=utf-8' });
@@ -107,12 +129,21 @@ async function readBody(req: IncomingMessage): Promise<string> {
 
 export function createControlHttp(
   engine: Engine,
-  opts?: { staticDir?: string; graph?: Graph; collector?: Collector; config?: unknown },
+  opts?: {
+    staticDir?: string;
+    graph?: Graph;
+    collector?: Collector;
+    config?: unknown;
+    togglesPath?: string;
+    chainPath?: string;
+  },
 ): Server {
   const staticDir = opts?.staticDir;
   const graph = opts?.graph;
   const collector = opts?.collector;
   const config = opts?.config;
+  const togglesPath = opts?.togglesPath ?? runtimePath();
+  const chainPath = opts?.chainPath ?? configPath();
 
   const server = createServer((req, res) => {
     void handleRequest(req, res).catch((err) => {
@@ -265,6 +296,40 @@ export function createControlHttp(
 
     if (method === 'GET' && pathname === '/api/config') {
       sendJson(res, 200, redactSecrets(config ?? {}));
+      return;
+    }
+
+    if (method === 'GET' && pathname === '/api/toggles') {
+      sendJson(res, 200, togglesView(togglesPath));
+      return;
+    }
+
+    if (method === 'POST' && pathname === '/api/toggles') {
+      // Same JSON-content-type + Origin guard pattern as /api/delegate.
+      const contentType = req.headers['content-type'];
+      if (typeof contentType !== 'string' || !contentType.toLowerCase().startsWith('application/json')) {
+        sendJson(res, 415, { error: 'content-type must be application/json' });
+        return;
+      }
+      const raw = await readBody(req);
+      let body: { stage?: unknown; enabled?: unknown };
+      try {
+        body = raw.length > 0 ? JSON.parse(raw) : {};
+      } catch {
+        sendJson(res, 400, { error: 'invalid JSON body' });
+        return;
+      }
+      if (!isKnownStage(body.stage) || typeof body.enabled !== 'boolean') {
+        sendJson(res, 400, { error: 'stage (known stage id) and enabled (boolean) are required' });
+        return;
+      }
+      const stage = body.stage;
+      const enabled = body.enabled;
+      // Live effect for our own stages (they read runtime.json per request);
+      // persisted to chain.json regardless, so a restart also picks it up.
+      setToggle(stage, enabled, togglesPath);
+      persistToggle(stage, enabled, chainPath);
+      sendJson(res, 200, togglesView(togglesPath));
       return;
     }
 

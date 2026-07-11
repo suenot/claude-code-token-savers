@@ -44,6 +44,7 @@ export type Config = {
   delegate?: DelegateConfig;
   control?: { enabled?: boolean };
   graph?: { model?: string; autobuild?: boolean; noMedia?: boolean; enabled?: boolean };
+  toggles?: Record<string, boolean>;
 };
 
 export type PlannedStage = {

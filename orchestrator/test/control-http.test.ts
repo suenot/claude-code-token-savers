@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import http from 'node:http';
-import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, writeFileSync, rmSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createControlHttp, isLoopbackHost, redactSecrets } from '../src/control/http.ts';
@@ -420,6 +420,120 @@ test('GET /api/unknown returns 404 (not the SPA fallback) when staticDir is conf
     } finally {
       server.close();
     }
+  });
+});
+
+function withTogglesServer(fn: (base: string, paths: { togglesPath: string; chainPath: string }) => Promise<void>) {
+  const dir = mkdtempSync(join(tmpdir(), 'shuba-toggles-http-'));
+  const togglesPath = join(dir, 'runtime.json');
+  const chainPath = join(dir, 'chain.json');
+  writeFileSync(chainPath, JSON.stringify({ terminal: 'anthropic', compressors: ['headroom'] }, null, 2));
+  const engine = stubEngine();
+  const server = createControlHttp(engine as any, { togglesPath, chainPath });
+  return new Promise<void>((resolve, reject) => {
+    server.listen(0, () => {
+      const addr = server.address();
+      const port = typeof addr === 'object' && addr ? addr.port : 0;
+      const base = `http://127.0.0.1:${port}`;
+      fn(base, { togglesPath, chainPath })
+        .then(resolve, reject)
+        .finally(() => {
+          server.close();
+          rmSync(dir, { recursive: true, force: true });
+        });
+    });
+  });
+}
+
+test('GET /api/toggles returns all 5 known stages with correct live/restartRequired flags', async () => {
+  await withTogglesServer(async (base) => {
+    const res = await fetch(`${base}/api/toggles`);
+    assert.equal(res.status, 200);
+    const body: any = await res.json();
+    assert.deepEqual(
+      body.map((s: any) => s.id).sort(),
+      ['compact-router', 'context-watchdog', 'headroom', 'pxpipe', 'rate-limiter'],
+    );
+    const byId = Object.fromEntries(body.map((s: any) => [s.id, s]));
+    assert.equal(byId['compact-router'].live, true);
+    assert.equal(byId['compact-router'].restartRequired, false);
+    assert.equal(byId['context-watchdog'].live, true);
+    assert.equal(byId['context-watchdog'].restartRequired, false);
+    assert.equal(byId['rate-limiter'].live, true);
+    assert.equal(byId['rate-limiter'].restartRequired, false);
+    assert.equal(byId['headroom'].live, false);
+    assert.equal(byId['headroom'].restartRequired, true);
+    assert.equal(byId['pxpipe'].live, false);
+    assert.equal(byId['pxpipe'].restartRequired, true);
+    // default (no runtime.json written yet): every stage enabled
+    for (const s of body) assert.equal(s.enabled, true);
+  });
+});
+
+test('POST /api/toggles disables rate-limiter, writing both runtime.json and chain.json', async () => {
+  await withTogglesServer(async (base, { togglesPath, chainPath }) => {
+    const res = await fetch(`${base}/api/toggles`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ stage: 'rate-limiter', enabled: false }),
+    });
+    assert.equal(res.status, 200);
+    const body: any = await res.json();
+    const rl = body.find((s: any) => s.id === 'rate-limiter');
+    assert.equal(rl.enabled, false);
+
+    const runtimeWritten = JSON.parse(readFileSync(togglesPath, 'utf8'));
+    assert.equal(runtimeWritten['rate-limiter'], false);
+
+    const chainWritten = JSON.parse(readFileSync(chainPath, 'utf8'));
+    assert.equal(chainWritten.toggles['rate-limiter'], false);
+    assert.equal(chainWritten.terminal, 'anthropic'); // preserved existing keys
+  });
+});
+
+test('POST /api/toggles for a restart-required stage still persists and reports restartRequired', async () => {
+  await withTogglesServer(async (base, { chainPath }) => {
+    const res = await fetch(`${base}/api/toggles`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ stage: 'headroom', enabled: false }),
+    });
+    assert.equal(res.status, 200);
+    const body: any = await res.json();
+    const hr = body.find((s: any) => s.id === 'headroom');
+    assert.equal(hr.enabled, false);
+    assert.equal(hr.restartRequired, true);
+    const chainWritten = JSON.parse(readFileSync(chainPath, 'utf8'));
+    assert.equal(chainWritten.toggles.headroom, false);
+  });
+});
+
+test('POST /api/toggles with an unknown stage returns 400', async () => {
+  await withTogglesServer(async (base) => {
+    const res = await fetch(`${base}/api/toggles`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ stage: 'not-a-stage', enabled: false }),
+    });
+    assert.equal(res.status, 400);
+  });
+});
+
+test('POST /api/toggles with a cross-origin Origin header returns 403 (CSRF guard)', async () => {
+  await withTogglesServer(async (base) => {
+    const res = await fetch(`${base}/api/toggles`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', origin: 'http://evil.com' },
+      body: JSON.stringify({ stage: 'rate-limiter', enabled: false }),
+    });
+    assert.equal(res.status, 403);
+  });
+});
+
+test('GET /api/toggles with a cross-origin Origin header returns 403', async () => {
+  await withTogglesServer(async (base) => {
+    const res = await fetch(`${base}/api/toggles`, { headers: { origin: 'http://evil.com' } });
+    assert.equal(res.status, 403);
   });
 });
 

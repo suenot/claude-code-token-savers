@@ -37,6 +37,38 @@ test('delegate returns chosen harness/model immediately; concurrency capped', as
   assert.notEqual((engine.status(c.job_id) as any).status, 'queued');
 });
 
+test('runner.run rejection releases concurrency slot and does not throw unhandled rejection', async () => {
+  const store = createStore({ dir: mkdtempSync(join(tmpdir(),'e-')), now: () => 1 });
+  let call = 0;
+  const secondJobStarted: Array<() => void> = [];
+  const runner: any = {
+    run(_job: any) {
+      call++;
+      if (call === 1) {
+        return Promise.reject(new Error('boom'));
+      }
+      return new Promise<void>((resolve) => {
+        secondJobStarted.push(resolve);
+      });
+    },
+  };
+  const select = (async () => ({ harness: 'opencode', model: 'm' })) as any;
+  const cfgOne = { concurrency: 1, default: { harness: 'opencode', model: 'm' } };
+  const engine = createEngine({ cfg: cfgOne as any, store, runner, select, projectCwd: '/r' });
+
+  const a = await engine.delegate({ task: '1' });
+  const b = await engine.delegate({ task: '2' });
+
+  // give the rejected first job's .finally() a chance to run and release the slot
+  await new Promise((r) => setTimeout(r, 10));
+
+  // second job should have started (slot released despite rejection)
+  assert.equal(call, 2);
+  assert.notEqual((engine.status(b.job_id) as any).status, undefined);
+  secondJobStarted.shift()?.();
+  void a;
+});
+
 test('status/result on unknown id → error', () => {
   const engine = createEngine({ cfg: cfg as any, store: createStore({ dir: mkdtempSync(join(tmpdir(),'e-')), now:()=>1 }), runner: gatedRunner() as any, select: (async()=>({harness:'x',model:'m'})) as any, projectCwd: '/r' });
   assert.ok('error' in engine.status('nope'));

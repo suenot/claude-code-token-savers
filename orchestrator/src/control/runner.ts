@@ -48,11 +48,14 @@ export function createRunner(opts: {
       store.update(job.id, { status: 'running', startedAt: now() });
 
       await new Promise<void>((resolve) => {
+        let settled = false;
         const child: any = spawnImpl(adapter.bin, args, {
           cwd: worktreePath ?? job.cwd,
         } as any);
 
         child.on('close', (code: number | null) => {
+          if (settled) return;
+          settled = true;
           if (worktreePath) {
             const { diff, removed } = finalizeWorktreeImpl(job.cwd, worktreePath);
             store.appendLog(job.id, `\n--- worktree diff (removed=${removed}) ---\n${diff}\n`);
@@ -60,6 +63,18 @@ export function createRunner(opts: {
           store.update(job.id, {
             exitCode: code,
             status: code === 0 ? 'done' : 'failed',
+            endedAt: now(),
+          });
+          resolve();
+        });
+
+        child.on('error', (err: Error) => {
+          if (settled) return;
+          settled = true;
+          store.appendLog(job.id, `\n--- spawn error ---\n${err.message}\n`);
+          store.update(job.id, {
+            status: 'failed',
+            error: err.message,
             endedAt: now(),
           });
           resolve();

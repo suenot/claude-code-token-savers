@@ -43,6 +43,10 @@ export function createEngine(opts: {
       job = store.update(id, { status: 'running' });
       runner
         .run(job)
+        .then(
+          () => {},
+          () => {},
+        )
         .finally(() => {
           running -= 1;
           pump();
@@ -60,7 +64,7 @@ export function createEngine(opts: {
         model,
         cwd: input.cwd ?? opts.projectCwd,
         isolation: input.isolation ?? opts.cfg.isolation ?? 'none',
-      } as any);
+      });
       queue.push(job.id);
       pump();
       return { job_id: job.id, harness_chosen: harness, model_chosen: model };

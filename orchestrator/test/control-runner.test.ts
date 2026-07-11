@@ -39,6 +39,30 @@ test('nonzero exit → failed', async () => {
   assert.equal(store.get(job.id)!.exitCode, 2);
 });
 
+test('spawn error (bad bin) → resolves, job failed, error recorded', async () => {
+  const store = createStore({ dir: mkdtempSync(join(tmpdir(),'r-')), now: () => 7 });
+  const job = store.create({ id:'', task:'t', harness:'gemini', model:null, cwd:'/r', isolation:'none' } as any);
+  const spawnErrorImpl = () => {
+    const child: any = new EventEmitter();
+    child.stdout = Readable.from([]);
+    child.stderr = Readable.from([]);
+    queueMicrotask(() => child.emit('error', new Error('spawn ENOENT')));
+    // never emits 'close'
+    return child;
+  };
+  const runner = createRunner({ store, spawnImpl: spawnErrorImpl as any, now: () => 9 });
+
+  const result = await Promise.race([
+    runner.run(store.get(job.id)!).then(() => 'resolved'),
+    new Promise((resolve) => setTimeout(() => resolve('timeout'), 2000)),
+  ]);
+
+  assert.equal(result, 'resolved');
+  const finished = store.get(job.id)!;
+  assert.equal(finished.status, 'failed');
+  assert.match(finished.error ?? '', /spawn ENOENT/);
+});
+
 test('unknown harness → failed with error', async () => {
   const store = createStore({ dir: mkdtempSync(join(tmpdir(),'r-')), now: () => 7 });
   const job = store.create({ id:'', task:'t', harness:'nope', model:null, cwd:'/r', isolation:'none' } as any);

@@ -8,6 +8,22 @@ test('claude adapter injects --dangerously-skip-permissions and model', () => {
   assert.deepEqual(args, ['--model', 'haiku', '-p', 'fix bug', '--dangerously-skip-permissions']);
 });
 
+test('claude adapter omits --dangerously-skip-permissions when SHUBA_SKIP_PERMISSIONS=0', () => {
+  const prev = process.env.SHUBA_SKIP_PERMISSIONS;
+  try {
+    process.env.SHUBA_SKIP_PERMISSIONS = '0';
+    const a = HARNESSES['claude'];
+    const args = a.buildArgs('fix bug', { model: 'haiku' });
+    assert.deepEqual(args, ['--model', 'haiku', '-p', 'fix bug']);
+  } finally {
+    if (prev === undefined) {
+      delete process.env.SHUBA_SKIP_PERMISSIONS;
+    } else {
+      process.env.SHUBA_SKIP_PERMISSIONS = prev;
+    }
+  }
+});
+
 test('gemini adapter omits -m when no model', () => {
   const args = HARNESSES['gemini'].buildArgs('summarize', {});
   assert.deepEqual(args, ['-p', 'summarize']);

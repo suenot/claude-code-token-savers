@@ -77,7 +77,10 @@ export const HARNESSES: Record<string, HarnessAdapter> = {
       if (opts.model !== undefined) {
         args.push('--model', opts.model);
       }
-      args.push('-p', task, '--dangerously-skip-permissions');
+      args.push('-p', task);
+      if (process.env.SHUBA_SKIP_PERMISSIONS !== '0') {
+        args.push('--dangerously-skip-permissions');
+      }
       return args;
     },
     extractResult: defaultExtractResult,

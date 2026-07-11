@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, readFileSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { DEFAULT_CONFIG, configPath, loadConfig } from '../src/config.js';
+import { DEFAULT_CONFIG, configPath, loadConfig } from '../src/config.ts';
 
 test('configPath is <home>/.shuba/chain.json', () => {
   assert.equal(configPath('/Users/x'), '/Users/x/.shuba/chain.json');

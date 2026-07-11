@@ -23,6 +23,8 @@ Claude Code ──stdio MCP──> shuba-control ──spawn──> opencode / g
 - `shuba-control` is a **new builtin**, registered in `registry.ts` as `control`. Unlike proxy stages it is **not in the ANTHROPIC_BASE_URL chain** — it is a sidecar. The supervisor starts it alongside the chain on `shuba up`/`run`.
 - **Transport: stdio MCP.** Claude Code spawns `shuba-control` as an MCP server (entry written to the project/user MCP config). Rationale: simplest local integration, no port/auth surface. `shuba run` can also auto-register it.
 - The control server is an MCP server implemented with the MCP TypeScript SDK over stdio.
+- **Auto-registration ("just works"):** `shuba run` writes the MCP-server entry into the project/user MCP config automatically (idempotent, removed/left intact on exit) so the user never configures anything by hand. If an entry already exists it is reconciled, not duplicated.
+- **Dual frontend on one engine:** the job/classifier/store engine is a runtime-agnostic core module. Two adapters sit on top of it — the **stdio MCP server** (for Claude Code, this spec) and an **HTTP + WebSocket API** (for the management frontend, Spec 3). The HTTP API is defined here as a thin wrapper over the same engine so Spec 3 only builds UI, not backend.
 
 ## 3. MCP tools
 
@@ -117,4 +119,3 @@ Extend `Config` (`~/.shuba/chain.json`) with the `delegate` block (§5) and regi
 ## 11. Open items deferred to implementation
 
 - Exact headless flags per CLI (`opencode run` vs `-p`, cursor-agent model flag) — verify against installed versions.
-- Whether `shuba run` auto-writes the MCP registration or documents a manual one-time step.

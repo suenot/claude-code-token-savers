@@ -51,7 +51,7 @@ shuba sets `GRAPHIFY_OPENROUTER_MODEL` (default `deepseek/deepseek-v4-flash`) an
 
 ## 6. Relationship to the existing client-side graphify
 
-- The shuba-managed path and the client SessionStart hook do the same job; running both would double-build. Implementation provides a clean toggle: if shuba manages the graph, document disabling the client SessionStart graphify hook (or have shuba detect and skip when the hook is active).
+- The shuba-managed path and the client SessionStart hook do the same job; running both would double-build. **shuba auto-disables the client-side graphify SessionStart hook** while it manages the graph: on `shuba up`/`run` it detects the hook in `~/.claude/settings.json` and neutralizes it (idempotent, restored on exit), so the two never double-build. No manual step.
 - rtk and caveman stay client-side — they are PreToolUse hook / output-style features with no proxy or MCP surface, so they are explicitly **out of scope** for shuba integration (established during brainstorming).
 
 ## 7. Testing / acceptance
@@ -64,4 +64,3 @@ shuba sets `GRAPHIFY_OPENROUTER_MODEL` (default `deepseek/deepseek-v4-flash`) an
 ## 8. Open items deferred to implementation
 
 - Exact graphify CLI subcommands/flags for headless `build`/`query`/`watch` — verify against the installed graphify version.
-- Whether shuba disables the client hook automatically or documents the manual step.

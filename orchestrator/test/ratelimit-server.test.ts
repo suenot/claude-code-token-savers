@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { once } from 'node:events';
-import { createGate, retryAfterMs, createRateLimiter } from '../src/ratelimit/server.js';
+import { createGate, retryAfterMs, createRateLimiter } from '../src/ratelimit/server.ts';
 
 // A controllable clock: now() reads `clock`, sleep(ms) advances it synchronously
 // so gate timing is deterministic without wall-clock waits.
@@ -9,8 +9,8 @@ function fakeClock() {
   let clock = 0;
   return {
     now: () => clock,
-    sleep: async (ms) => { clock += Math.max(0, ms); },
-    advance: (ms) => { clock += ms; },
+    sleep: async (ms: number) => { clock += Math.max(0, ms); },
+    advance: (ms: number) => { clock += ms; },
     get value() { return clock; },
   };
 }
@@ -41,16 +41,17 @@ test('gate: penalize pauses the whole queue', async () => {
   assert.ok(c.value >= 4000, `expected cooldown >=4000ms, got ${c.value}`);
 });
 
-async function withServer(opts, fn) {
+async function withServer(opts: any, fn: (base: string) => Promise<any>) {
   const srv = createRateLimiter({ port: 0, upstream: 'https://upstream.test', rps: 1000, burst: 1000, ...opts });
   srv.listen(0); await once(srv, 'listening');
-  const base = `http://127.0.0.1:${srv.address().port}`;
+  const address = srv.address();
+  const base = `http://127.0.0.1:${typeof address === 'object' && address ? address.port : ''}`;
   try { return await fn(base); } finally { srv.close(); }
 }
 
 test('forwards to upstream and returns status', async () => {
-  const calls = [];
-  const fetchImpl = async (url) => { calls.push(url); return { status: 200, headers: new Headers(), body: null }; };
+  const calls: string[] = [];
+  const fetchImpl = async (url: string) => { calls.push(url); return { status: 200, headers: new Headers(), body: null }; };
   await withServer({ fetchImpl }, async (base) => {
     const r = await fetch(`${base}/v1/messages`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' });
     assert.equal(r.status, 200);
@@ -61,7 +62,7 @@ test('forwards to upstream and returns status', async () => {
 test('upstream 429 triggers a global cooldown honoring Retry-After', async () => {
   const c = fakeClock();
   const fetchImpl = async () => ({ status: 429, headers: new Headers({ 'retry-after': '7' }), body: null });
-  const penalties = [];
+  const penalties: number[] = [];
   await withServer({ fetchImpl, now: c.now, sleep: c.sleep, rps: 1000, burst: 1000 }, async (base) => {
     const r = await fetch(`${base}/v1/messages`, { method: 'POST', body: '{}' });
     assert.equal(r.status, 429); // 429 passes through to client

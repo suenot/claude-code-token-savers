@@ -1,5 +1,5 @@
-#!/usr/bin/env node
-import { createRateLimiter } from '../src/ratelimit/server.js';
+#!/usr/bin/env bun
+import { createRateLimiter } from '../src/ratelimit/server.ts';
 
 const port = Number(process.env.PORT || 47840);
 const upstream = process.env.RATELIMIT_UPSTREAM || 'https://api.anthropic.com';

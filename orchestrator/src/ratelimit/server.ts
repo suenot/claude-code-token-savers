@@ -1,4 +1,4 @@
-import { createServer } from 'node:http';
+import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import { Readable } from 'node:stream';
 
 // A pure passthrough proxy that paces outbound requests to a steady rate so a
@@ -8,10 +8,15 @@ import { Readable } from 'node:stream';
 // When the upstream *does* answer 429, its Retry-After is honored globally —
 // every queued request waits out the cooldown instead of piling on.
 
-const defaultSleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const defaultSleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
 
 // Serialized token-bucket gate. `acquire()` resolves when the caller may fire.
-export function createGate({ rps, burst, now = Date.now, sleep = defaultSleep }) {
+export function createGate({ rps, burst, now = Date.now, sleep = defaultSleep }: {
+  rps: number;
+  burst: number;
+  now?: () => number;
+  sleep?: (ms: number) => Promise<void>;
+}): { acquire(): Promise<void>; penalize(ms: number): void } {
   const perMs = rps / 1000;
   let tokens = burst;
   let last = now();
@@ -44,7 +49,7 @@ export function createGate({ rps, burst, now = Date.now, sleep = defaultSleep })
       return run;
     },
     // Extend the global cooldown so the whole queue waits out a 429.
-    penalize(ms) {
+    penalize(ms: number) {
       const until = now() + ms;
       if (until > pauseUntil) pauseUntil = until;
     },
@@ -53,7 +58,7 @@ export function createGate({ rps, burst, now = Date.now, sleep = defaultSleep })
 
 // Parse a Retry-After header (delta-seconds only; HTTP-date form is ignored and
 // falls back to the default). Returns milliseconds.
-export function retryAfterMs(header, fallbackMs) {
+export function retryAfterMs(header: string | null | undefined, fallbackMs: number): number {
   if (header == null) return fallbackMs;
   const secs = Number(String(header).trim());
   if (Number.isFinite(secs) && secs >= 0) return secs * 1000;
@@ -69,18 +74,27 @@ export function createRateLimiter({
   fetchImpl = fetch,
   now = Date.now,
   sleep = defaultSleep,
-}) {
-  const log = (...a) => process.stderr.write(`[rate-limiter] ${a.join(' ')}\n`);
+}: {
+  port: number;
+  upstream: string;
+  rps?: number;
+  burst?: number;
+  default429CooldownMs?: number;
+  fetchImpl?: typeof fetch;
+  now?: () => number;
+  sleep?: (ms: number) => Promise<void>;
+}): Server {
+  const log = (...a: string[]) => process.stderr.write(`[rate-limiter] ${a.join(' ')}\n`);
   const gate = createGate({ rps, burst, now, sleep });
 
-  async function forward(req, bodyBuf, res) {
-    const headers = { ...req.headers };
+  async function forward(req: IncomingMessage, bodyBuf: Buffer, res: ServerResponse) {
+    const headers: Record<string, any> = { ...req.headers };
     delete headers.host; delete headers['content-length']; delete headers['accept-encoding'];
     const up = await fetchImpl(upstream + req.url, {
       method: req.method,
       headers,
       body: bodyBuf.length ? bodyBuf : undefined,
-    });
+    } as RequestInit);
     if (up.status === 429) {
       const cooldown = retryAfterMs(up.headers && up.headers.get ? up.headers.get('retry-after') : null, default429CooldownMs);
       gate.penalize(cooldown);
@@ -90,7 +104,7 @@ export function createRateLimiter({
     delete out['content-encoding']; delete out['content-length']; delete out['transfer-encoding'];
     res.writeHead(up.status || 200, out);
     if (up.body) {
-      const stream = Readable.fromWeb(up.body);
+      const stream = Readable.fromWeb(up.body as any);
       stream.on('error', () => { try { res.destroy(); } catch { /* already closed */ } });
       stream.pipe(res);
     } else {
@@ -104,14 +118,14 @@ export function createRateLimiter({
       res.end('{"status":"ok"}');
       return;
     }
-    const chunks = [];
+    const chunks: Buffer[] = [];
     req.on('data', (c) => chunks.push(c));
     req.on('end', async () => {
       const raw = Buffer.concat(chunks);
       try {
         await gate.acquire();
         await forward(req, raw, res);
-      } catch (e) {
+      } catch (e: any) {
         if (!res.headersSent) res.writeHead(502);
         res.end('rate-limiter error: ' + e.message);
       }

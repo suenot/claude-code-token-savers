@@ -1,13 +1,13 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mintToken } from '../src/router-bootstrap.js';
+import { mintToken, type MintTokenFetch } from '../src/router-bootstrap.ts';
 
 test('mintToken posts to /api/tokens and returns the token', async () => {
-  const seen = {};
-  const fetchImpl = async (url, opts) => {
+  const seen: { url?: string; method?: string } = {};
+  const fetchImpl: MintTokenFetch = async (url, opts) => {
     seen.url = url;
     seen.method = opts?.method;
-    return { ok: true, json: async () => ({ token: 'la_sk_abc123' }) };
+    return { ok: true, json: async () => ({ token: 'la_sk_abc123' }), text: async () => '' };
   };
   const token = await mintToken('http://127.0.0.1:8080', { fetchImpl });
   assert.equal(token, 'la_sk_abc123');
@@ -16,6 +16,6 @@ test('mintToken posts to /api/tokens and returns the token', async () => {
 });
 
 test('mintToken throws body on failure', async () => {
-  const fetchImpl = async () => ({ ok: false, text: async () => 'nope' });
+  const fetchImpl: MintTokenFetch = async () => ({ ok: false, text: async () => 'nope', json: async () => ({ token: '' }) });
   await assert.rejects(mintToken('http://127.0.0.1:8080', { fetchImpl }), /nope/);
 });

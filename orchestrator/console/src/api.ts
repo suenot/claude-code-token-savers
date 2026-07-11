@@ -12,6 +12,7 @@ import type {
   JobResultResponse,
   JobStatusResponse,
   Stats,
+  ToggleRow,
 } from './types.ts';
 
 class ApiError extends Error {
@@ -97,6 +98,20 @@ export function graphQuery(query: string): Promise<GraphQueryResult> {
 // (matching /apikey|secret|token/i) already stripped server-side.
 export function getConfig(): Promise<Record<string, unknown>> {
   return getJson<Record<string, unknown>>('/api/config');
+}
+
+// getToggles fetches the live/config-enabled state of every known shuba
+// chain stage (see orchestrator/src/control/toggles.ts).
+export function getToggles(): Promise<ToggleRow[]> {
+  return getJson<ToggleRow[]>('/api/toggles');
+}
+
+// setToggle flips a single stage's enabled flag and persists it. The POST
+// requires a JSON content-type (CSRF guard on the control server) — always
+// go through postJson rather than a raw fetch. Returns the updated full
+// list, same shape as getToggles.
+export function setToggle(stage: string, enabled: boolean): Promise<ToggleRow[]> {
+  return postJson<ToggleRow[]>('/api/toggles', { stage, enabled });
 }
 
 // openLogStream opens a WebSocket against /api/stream/logs/:id and invokes

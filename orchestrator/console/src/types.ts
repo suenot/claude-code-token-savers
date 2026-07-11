@@ -73,3 +73,39 @@ export type GraphQueryResult = {
   ok: boolean;
   result: string;
 };
+
+// ToggleRow mirrors the shape served by GET/POST /api/toggles
+// (orchestrator/src/control/http.ts `togglesView`). `live` reflects whether
+// the running process already honors the toggle without a restart;
+// `restartRequired` is `!live` (some stages, e.g. pxpipe/headroom, only
+// pick up config changes on restart).
+export type ToggleRow = {
+  id: string;
+  enabled: boolean;
+  live: boolean;
+  restartRequired: boolean;
+};
+
+// RequestFeedEntry mirrors the merged per-hop feed served by GET
+// /api/requests (orchestrator/src/control/collector.ts `hopLog`), which
+// interleaves pxpipe-derived entries with per-hop reqlog entries
+// (orchestrator/src/control/reqlog.ts). The schema is loose/optional by
+// design — entries come from two different sources with only partial
+// field overlap — so every field must be rendered defensively.
+export type RequestFeedEntry = {
+  ts?: string | number;
+  timestamp?: string | number;
+  stage?: string;
+  source?: string;
+  model?: string;
+  maxTokens?: number;
+  action?: string;
+  upstreamStatus?: number;
+  preview?: string;
+  path?: string;
+  method?: string;
+  status?: number;
+  durationMs?: number;
+  reason?: string;
+  tokens?: number;
+};

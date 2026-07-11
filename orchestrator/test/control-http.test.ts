@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { createControlHttp } from '../src/control/http.ts';
+import http from 'node:http';
+import { createControlHttp, isLoopbackHost } from '../src/control/http.ts';
 
 function stubEngine() {
   return {
@@ -118,4 +119,36 @@ test('POST /api/delegate with bad JSON returns 400', async () => {
     });
     assert.equal(res.status, 400);
   });
+});
+
+test('GET /health with a spoofed cross-origin Host header returns 403 (DNS-rebinding guard)', async () => {
+  await withServer(async (base) => {
+    const { port } = new URL(base);
+    const status = await new Promise<number>((resolve, reject) => {
+      const req = http.request(
+        {
+          host: '127.0.0.1',
+          port: Number(port),
+          path: '/health',
+          method: 'GET',
+          headers: { Host: 'evil.com' },
+        },
+        (res) => {
+          res.resume();
+          res.on('end', () => resolve(res.statusCode ?? 0));
+        },
+      );
+      req.on('error', reject);
+      req.end();
+    });
+    assert.equal(status, 403);
+  });
+});
+
+test('isLoopbackHost accepts loopback hosts and rejects everything else', () => {
+  assert.equal(isLoopbackHost('127.0.0.1:47830'), true);
+  assert.equal(isLoopbackHost('localhost'), true);
+  assert.equal(isLoopbackHost('[::1]:80'), true);
+  assert.equal(isLoopbackHost('evil.com'), false);
+  assert.equal(isLoopbackHost(undefined), false);
 });

@@ -23,6 +23,31 @@ const CONTENT_TYPES: Record<string, string> = {
   '.ico': 'image/x-icon',
 };
 
+// Returns true when `host` (a Host header value, optionally with :port) refers
+// to loopback (127.0.0.1, localhost, or [::1]). Used to guard against
+// DNS-rebinding (Host header) and CSWSH (Origin header) attacks against the
+// control server, which is only ever meant to be reached from the local
+// machine.
+export function isLoopbackHost(host?: string): boolean {
+  if (!host) return false;
+  let hostname = host.trim();
+  if (hostname.length === 0) return false;
+  // Strip a bracketed IPv6 literal, e.g. "[::1]:8080" -> "::1"
+  const bracketMatch = hostname.match(/^\[([^\]]+)\]/);
+  if (bracketMatch) {
+    hostname = bracketMatch[1]!;
+  } else {
+    // Strip a trailing :port, but only if there's exactly one colon (avoid
+    // mangling bare IPv6 literals without brackets).
+    const colonCount = (hostname.match(/:/g) ?? []).length;
+    if (colonCount === 1) {
+      hostname = hostname.slice(0, hostname.indexOf(':'));
+    }
+  }
+  hostname = hostname.toLowerCase();
+  return hostname === '127.0.0.1' || hostname === 'localhost' || hostname === '::1';
+}
+
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
   const data = JSON.stringify(body);
   res.writeHead(status, { 'content-type': 'application/json; charset=utf-8' });
@@ -52,6 +77,14 @@ export function createControlHttp(engine: Engine, opts?: { staticDir?: string })
 
   async function handleRequest(req: IncomingMessage, res: ServerResponse): Promise<void> {
     const method = req.method ?? 'GET';
+
+    // Guard against DNS-rebinding: reject requests whose Host header does not
+    // point at loopback, before doing anything else.
+    if (!isLoopbackHost(req.headers.host)) {
+      sendJson(res, 403, { error: 'forbidden: invalid host' });
+      return;
+    }
+
     const url = new URL(req.url ?? '/', 'http://localhost');
     const pathname = url.pathname;
     const segments = pathname.split('/').filter(Boolean);
@@ -106,6 +139,34 @@ export function createControlHttp(engine: Engine, opts?: { staticDir?: string })
   }
 
   server.on('upgrade', (req, socket) => {
+    // DNS-rebinding guard: reject upgrades whose Host header isn't loopback.
+    if (!isLoopbackHost(req.headers.host)) {
+      socket.write('HTTP/1.1 403 Forbidden\r\n\r\n');
+      socket.destroy();
+      return;
+    }
+
+    // CSWSH guard: a browser tab on an attacker-controlled origin can still
+    // point a WebSocket at ws://127.0.0.1:<port>/... (the Host header alone
+    // doesn't protect against this, since the attacker's page controls the
+    // URL, not the Host). Reject any upgrade carrying a non-loopback Origin.
+    // Non-browser clients (CLI, native WS, some fetch-based SPA clients) may
+    // omit Origin entirely — that's allowed.
+    const origin = req.headers.origin;
+    if (typeof origin === 'string' && origin.length > 0) {
+      let originHost: string | undefined;
+      try {
+        originHost = new URL(origin).hostname;
+      } catch {
+        originHost = undefined;
+      }
+      if (!originHost || !isLoopbackHost(originHost)) {
+        socket.write('HTTP/1.1 403 Forbidden\r\n\r\n');
+        socket.destroy();
+        return;
+      }
+    }
+
     const url = new URL(req.url ?? '/', 'http://localhost');
     const segments = url.pathname.split('/').filter(Boolean);
     // /api/stream/logs/:id

@@ -187,6 +187,68 @@ test('GET /health with a cross-origin Origin header returns 403 (Origin guard ap
   });
 });
 
+function stubCollector() {
+  return {
+    calls: [] as string[],
+    async chain() {
+      this.calls.push('chain');
+      return [{ id: 'a', port: 4001, healthy: true }];
+    },
+    async stats() {
+      this.calls.push('stats');
+      return { totals: { events: 3, saved_pct: 60 } };
+    },
+  };
+}
+
+test('GET /api/chain returns the collector chain output', async () => {
+  const engine = stubEngine();
+  const collector = stubCollector();
+  const server = createControlHttp(engine as any, { collector: collector as any });
+  await new Promise<void>((resolve) => server.listen(0, resolve));
+  const addr = server.address();
+  const port = typeof addr === 'object' && addr ? addr.port : 0;
+  try {
+    const res = await fetch(`http://127.0.0.1:${port}/api/chain`);
+    assert.equal(res.status, 200);
+    assert.deepEqual(await res.json(), [{ id: 'a', port: 4001, healthy: true }]);
+    assert.deepEqual(collector.calls, ['chain']);
+  } finally {
+    server.close();
+  }
+});
+
+test('GET /api/stats returns the collector stats output', async () => {
+  const engine = stubEngine();
+  const collector = stubCollector();
+  const server = createControlHttp(engine as any, { collector: collector as any });
+  await new Promise<void>((resolve) => server.listen(0, resolve));
+  const addr = server.address();
+  const port = typeof addr === 'object' && addr ? addr.port : 0;
+  try {
+    const res = await fetch(`http://127.0.0.1:${port}/api/stats`);
+    assert.equal(res.status, 200);
+    assert.deepEqual(await res.json(), { totals: { events: 3, saved_pct: 60 } });
+    assert.deepEqual(collector.calls, ['stats']);
+  } finally {
+    server.close();
+  }
+});
+
+test('GET /api/chain returns 404 when no collector is configured', async () => {
+  await withServer(async (base) => {
+    const res = await fetch(`${base}/api/chain`);
+    assert.equal(res.status, 404);
+  });
+});
+
+test('GET /api/stats returns 404 when no collector is configured', async () => {
+  await withServer(async (base) => {
+    const res = await fetch(`${base}/api/stats`);
+    assert.equal(res.status, 404);
+  });
+});
+
 test('isLoopbackHost accepts loopback hosts and rejects everything else', () => {
   assert.equal(isLoopbackHost('127.0.0.1:47830'), true);
   assert.equal(isLoopbackHost('localhost'), true);

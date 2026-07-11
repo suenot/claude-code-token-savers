@@ -17,6 +17,11 @@ type Graph = {
   query(query: string): unknown;
 };
 
+type Collector = {
+  chain(): Promise<unknown>;
+  stats(): Promise<unknown>;
+};
+
 const CONTENT_TYPES: Record<string, string> = {
   '.html': 'text/html; charset=utf-8',
   '.js': 'text/javascript; charset=utf-8',
@@ -78,9 +83,13 @@ async function readBody(req: IncomingMessage): Promise<string> {
   return Buffer.concat(chunks).toString('utf8');
 }
 
-export function createControlHttp(engine: Engine, opts?: { staticDir?: string; graph?: Graph }): Server {
+export function createControlHttp(
+  engine: Engine,
+  opts?: { staticDir?: string; graph?: Graph; collector?: Collector },
+): Server {
   const staticDir = opts?.staticDir;
   const graph = opts?.graph;
+  const collector = opts?.collector;
 
   const server = createServer((req, res) => {
     void handleRequest(req, res).catch((err) => {
@@ -198,6 +207,24 @@ export function createControlHttp(engine: Engine, opts?: { staticDir?: string; g
       }
       const result = graph.query(body.query ?? '');
       sendJson(res, 200, result);
+      return;
+    }
+
+    if (method === 'GET' && pathname === '/api/chain') {
+      if (!collector) {
+        sendJson(res, 404, { error: 'collector not enabled' });
+        return;
+      }
+      sendJson(res, 200, await collector.chain());
+      return;
+    }
+
+    if (method === 'GET' && pathname === '/api/stats') {
+      if (!collector) {
+        sendJson(res, 404, { error: 'collector not enabled' });
+        return;
+      }
+      sendJson(res, 200, await collector.stats());
       return;
     }
 

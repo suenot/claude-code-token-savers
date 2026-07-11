@@ -1,10 +1,10 @@
-import { execSync } from 'node:child_process';
+import { execFileSync } from 'node:child_process';
 import { join } from 'node:path';
 
-export type ExecImpl = (cmd: string, opts: { cwd: string }) => string;
+export type ExecImpl = (file: string, args: string[], opts: { cwd: string }) => string;
 
-export const defaultExec: ExecImpl = (cmd, opts) =>
-  execSync(cmd, { cwd: opts.cwd, shell: '/bin/bash' }).toString();
+export const defaultExec: ExecImpl = (file, args, opts) =>
+  execFileSync(file, args, { cwd: opts.cwd }).toString();
 
 export function createWorktree(
   repoCwd: string,
@@ -12,7 +12,7 @@ export function createWorktree(
   execImpl: ExecImpl = defaultExec,
 ): { path: string } {
   const path = join(repoCwd, '.shuba-worktrees', id);
-  execImpl(`git worktree add ${JSON.stringify(path)} -d`, { cwd: repoCwd });
+  execImpl('git', ['worktree', 'add', path, '-d'], { cwd: repoCwd });
   return { path };
 }
 
@@ -21,10 +21,10 @@ export function finalizeWorktree(
   path: string,
   execImpl: ExecImpl = defaultExec,
 ): { diff: string; removed: boolean } {
-  execImpl('git add -A', { cwd: path });
-  const diff = execImpl('git diff --cached', { cwd: path });
+  execImpl('git', ['add', '-A'], { cwd: path });
+  const diff = execImpl('git', ['diff', '--cached'], { cwd: path });
   if (diff.trim() === '') {
-    execImpl(`git worktree remove --force ${JSON.stringify(path)}`, { cwd: repoCwd });
+    execImpl('git', ['worktree', 'remove', '--force', path], { cwd: repoCwd });
     return { diff: '', removed: true };
   }
   return { diff, removed: false };

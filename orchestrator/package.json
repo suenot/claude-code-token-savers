@@ -13,7 +13,7 @@
     "test": "bun test",
     "typecheck": "tsc --noEmit",
     "build": "bun build ./bin/shuba.ts --compile --outfile shuba",
-    "console:build": "bun build console/src/main.tsx --outdir console/dist --target browser && cp console/index.html console/dist/index.html",
+    "console:build": "bun build console/src/main.tsx --outdir console/dist --target browser --minify && cp console/index.html console/dist/index.html",
     "console:dev": "mkdir -p console/dist && cp console/index.html console/dist/index.html && bun build console/src/main.tsx --outdir console/dist --target browser --watch",
     "console:typecheck": "tsc --noEmit -p console/tsconfig.json"
   },

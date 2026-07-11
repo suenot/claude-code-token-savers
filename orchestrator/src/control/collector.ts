@@ -1,4 +1,4 @@
-import { readFile } from 'node:fs/promises';
+import { open, stat } from 'node:fs/promises';
 
 export type ChainStage = { id: string; port: number; healthUrl: string };
 
@@ -30,6 +30,55 @@ export type Collector = {
 // network/file operation is individually guarded: a missing file, an
 // unreachable stage, or a failed fetch is omitted from the result rather
 // than thrown.
+// Maximum number of bytes read from the tail of events.jsonl. Both stats()
+// and recentRequests() poll this file every ~2s from up to 3 console views;
+// reading the whole file on every poll is O(filesize) and grows unbounded as
+// the file grows. Capping the read keeps each poll O(1) relative to file
+// size, at the cost of stats().totals.events reflecting only "recent events
+// in the last 256KB" rather than a lifetime count — acceptable for a
+// dashboard.
+const TAIL_CAP_BYTES = 256 * 1024;
+
+// readTailLines reads at most the last TAIL_CAP_BYTES of `path`, splits it
+// into non-empty lines, and drops a possibly-truncated first line (the read
+// may have started mid-line when the file is larger than the cap). For files
+// smaller than the cap this reads the whole file, so behavior is unchanged
+// (aside from the truncated-first-line handling, which is a no-op when the
+// read started at offset 0). Returns `undefined` (not an empty array) when
+// the file is missing/unreadable, so callers can distinguish "no file" from
+// "file exists but is empty" the same way the previous whole-file readFile
+// did via its catch block.
+async function readTailLines(path: string): Promise<string[] | undefined> {
+  let handle;
+  try {
+    handle = await open(path, 'r');
+  } catch {
+    return undefined;
+  }
+  try {
+    const info = await stat(path);
+    const size = info.size;
+    const readLen = Math.min(size, TAIL_CAP_BYTES);
+    const start = size - readLen;
+    const buffer = Buffer.alloc(readLen);
+    if (readLen > 0) {
+      await handle.read(buffer, 0, readLen, start);
+    }
+    let raw = buffer.toString('utf8');
+    if (start > 0) {
+      // We may have started mid-line; drop the (possibly partial) first
+      // line since we can't tell whether it's complete.
+      const firstNewline = raw.indexOf('\n');
+      raw = firstNewline === -1 ? '' : raw.slice(firstNewline + 1);
+    }
+    return raw.split('\n').filter((l) => l.trim().length > 0);
+  } catch {
+    return undefined;
+  } finally {
+    await handle.close();
+  }
+}
+
 export function createCollector(opts: CollectorOpts): Collector {
   const fetchImpl = opts.fetchImpl ?? fetch;
   const stages = opts.stages ?? [];
@@ -51,13 +100,11 @@ export function createCollector(opts: CollectorOpts): Collector {
 
   async function readPxpipeEvents(): Promise<{ count: number; avgSavedPct?: number } | undefined> {
     if (!opts.pxpipeEventsPath) return undefined;
-    let raw: string;
-    try {
-      raw = await readFile(opts.pxpipeEventsPath, 'utf8');
-    } catch {
-      return undefined;
-    }
-    const lines = raw.split('\n').filter((l) => l.trim().length > 0);
+    const lines = await readTailLines(opts.pxpipeEventsPath);
+    if (lines === undefined) return undefined;
+    // Note: `count` (and thus stats().totals.events) reflects only the
+    // events found within the last TAIL_CAP_BYTES of the file, not a
+    // lifetime total — acceptable for the dashboard's purposes.
     const savedPcts: number[] = [];
     for (const line of lines) {
       try {
@@ -107,13 +154,8 @@ export function createCollector(opts: CollectorOpts): Collector {
   // configured path) resolves to an empty array rather than throwing.
   async function recentRequests(limit = 100): Promise<unknown[]> {
     if (!opts.pxpipeEventsPath) return [];
-    let raw: string;
-    try {
-      raw = await readFile(opts.pxpipeEventsPath, 'utf8');
-    } catch {
-      return [];
-    }
-    const lines = raw.split('\n').filter((l) => l.trim().length > 0);
+    const lines = await readTailLines(opts.pxpipeEventsPath);
+    if (lines === undefined) return [];
     const entries: unknown[] = [];
     for (const line of lines) {
       try {

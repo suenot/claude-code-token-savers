@@ -139,6 +139,62 @@ test('recentRequests() returns an empty array when nothing is configured', async
   assert.deepEqual(await collector.recentRequests(), []);
 });
 
+test('recentRequests() returns the last entries even when the file is larger than the tail cap', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'shuba-collector-'));
+  const eventsPath = join(dir, 'events.jsonl');
+  try {
+    // Pad each line so the file exceeds the collector's ~256KB tail-read
+    // cap; the last few lines must still come back correctly even though
+    // the collector only reads the final slice of the file.
+    const filler = 'x'.repeat(500);
+    const lines: string[] = [];
+    let totalBytes = 0;
+    let id = 0;
+    const targetBytes = 300 * 1024;
+    while (totalBytes < targetBytes) {
+      id += 1;
+      const line = JSON.stringify({ id, filler });
+      lines.push(line);
+      totalBytes += line.length + 1;
+    }
+    await writeFile(eventsPath, lines.join('\n') + '\n');
+    const collector = createCollector({ pxpipeEventsPath: eventsPath });
+    const recent = await collector.recentRequests(3);
+    assert.deepEqual(
+      recent,
+      [lines[lines.length - 1]!, lines[lines.length - 2]!, lines[lines.length - 3]!].map((l) => JSON.parse(l)),
+    );
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test('stats() counts only recent events within the tail cap for a file larger than the cap', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'shuba-collector-'));
+  const eventsPath = join(dir, 'events.jsonl');
+  try {
+    const filler = 'x'.repeat(500);
+    const lines: string[] = [];
+    let totalBytes = 0;
+    let count = 0;
+    const targetBytes = 300 * 1024;
+    while (totalBytes < targetBytes) {
+      count += 1;
+      const line = JSON.stringify({ saved_pct: 50, filler });
+      lines.push(line);
+      totalBytes += line.length + 1;
+    }
+    await writeFile(eventsPath, lines.join('\n') + '\n');
+    const collector = createCollector({ pxpipeEventsPath: eventsPath });
+    const stats = await collector.stats();
+    assert.ok(typeof stats.totals.events === 'number');
+    assert.ok(stats.totals.events! > 0);
+    assert.ok(stats.totals.events! < count, 'tail-capped count should be less than the full file line count');
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
 test('recentRequests() skips a malformed line', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'shuba-collector-'));
   const eventsPath = join(dir, 'events.jsonl');

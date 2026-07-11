@@ -23,7 +23,7 @@ type Collector = {
   recentRequests(limit?: number): Promise<unknown>;
 };
 
-const SECRET_KEY_RE = /apikey|secret|token/i;
+const SECRET_KEY_RE = /api[_-]?key|secret|token|password|passphrase|credential|bearer|private[_-]?key/i;
 
 // redactSecrets recursively walks a value and drops any object key whose
 // name matches SECRET_KEY_RE (case-insensitive). Used to strip credentials

@@ -4,7 +4,7 @@ import http from 'node:http';
 import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { createControlHttp, isLoopbackHost } from '../src/control/http.ts';
+import { createControlHttp, isLoopbackHost, redactSecrets } from '../src/control/http.ts';
 
 function stubEngine() {
   return {
@@ -429,4 +429,63 @@ test('isLoopbackHost accepts loopback hosts and rejects everything else', () => 
   assert.equal(isLoopbackHost('[::1]:80'), true);
   assert.equal(isLoopbackHost('evil.com'), false);
   assert.equal(isLoopbackHost(undefined), false);
+});
+
+test('redactSecrets strips separator-delimited and bare secret-shaped keys at any depth', () => {
+  const input = {
+    OPENROUTER_API_KEY: 'sk-or-secret',
+    api_key: 'a',
+    'api-key': 'b',
+    password: 'c',
+    bearerToken: 'd',
+    model: 'sonnet',
+    harness: 'opencode',
+    auth: { private_key: 'x', region: 'us' },
+  };
+  const out = redactSecrets(input) as Record<string, unknown>;
+  assert.equal('OPENROUTER_API_KEY' in out, false);
+  assert.equal('api_key' in out, false);
+  assert.equal('api-key' in out, false);
+  assert.equal('password' in out, false);
+  assert.equal('bearerToken' in out, false);
+  assert.equal(out.model, 'sonnet');
+  assert.equal(out.harness, 'opencode');
+  assert.deepEqual(out.auth, { region: 'us' });
+  assert.equal((out.auth as Record<string, unknown>).private_key, undefined);
+});
+
+test('GET /%2e%2e/%2e%2e/etc/passwd (encoded traversal) does not escape staticDir', async () => {
+  await withStaticDir(async (dir) => {
+    const engine = stubEngine();
+    const server = createControlHttp(engine as any, { staticDir: dir });
+    await new Promise<void>((resolve) => server.listen(0, resolve));
+    const addr = server.address();
+    const port = typeof addr === 'object' && addr ? addr.port : 0;
+    try {
+      const res = await fetch(`http://127.0.0.1:${port}/%2e%2e/%2e%2e/etc/passwd`);
+      assert.ok(res.status === 200 || res.status === 404);
+      const body = await res.text();
+      assert.doesNotMatch(body, /root:/);
+    } finally {
+      server.close();
+    }
+  });
+});
+
+test('GET /../../etc/passwd (literal traversal) does not escape staticDir', async () => {
+  await withStaticDir(async (dir) => {
+    const engine = stubEngine();
+    const server = createControlHttp(engine as any, { staticDir: dir });
+    await new Promise<void>((resolve) => server.listen(0, resolve));
+    const addr = server.address();
+    const port = typeof addr === 'object' && addr ? addr.port : 0;
+    try {
+      const res = await fetch(`http://127.0.0.1:${port}/../../etc/passwd`);
+      assert.ok(res.status === 200 || res.status === 404);
+      const body = await res.text();
+      assert.doesNotMatch(body, /root:/);
+    } finally {
+      server.close();
+    }
+  });
 });

@@ -1,6 +1,7 @@
 import { fileURLToPath } from 'node:url';
 
 const COMPACT_BIN = fileURLToPath(new URL('../bin/compact-interceptor.js', import.meta.url));
+const WATCHDOG_BIN = fileURLToPath(new URL('../bin/context-watchdog.js', import.meta.url));
 
 export const REGISTRY = {
   pxpipe: {
@@ -60,6 +61,30 @@ export const REGISTRY = {
           COMPACT_MODEL: c.model || 'deepseek/deepseek-v4-flash',
           COMPACT_BASE_URL: c.baseUrl || 'https://openrouter.ai/api/v1',
           COMPACT_ENV_KEY: c.envKey || 'OPENROUTER_API_KEY',
+        },
+      };
+    },
+  },
+  'context-watchdog': {
+    id: 'context-watchdog',
+    builtin: true,
+    bin: process.execPath,
+    defaultPort: 47851,
+    dialect: 'anthropic',
+    terminal: false,
+    healthPath: '/health',
+    build({ port, upstreamBase, config }) {
+      const c = (config && config.contextWatchdog) || {};
+      return {
+        args: [WATCHDOG_BIN],
+        env: {
+          PORT: String(port),
+          WATCHDOG_UPSTREAM: upstreamBase,
+          WATCHDOG_MODEL: c.model || 'deepseek/deepseek-v4-flash',
+          WATCHDOG_BASE_URL: c.baseUrl || 'https://openrouter.ai/api/v1',
+          WATCHDOG_ENV_KEY: c.envKey || 'OPENROUTER_API_KEY',
+          WATCHDOG_THRESHOLD: String(c.thresholdTokens ?? 300000),
+          WATCHDOG_TAIL_TURNS: String(c.tailTurns ?? 6),
         },
       };
     },

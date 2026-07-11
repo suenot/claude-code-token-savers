@@ -54,3 +54,27 @@ test('compact-router applies default model when config omits it', () => {
   const { env } = REGISTRY['compact-router'].build({ port: 1, upstreamBase: 'http://x' });
   assert.equal(env.COMPACT_MODEL, 'deepseek/deepseek-v4-flash');
 });
+
+test('context-watchdog builtin wires threshold/tail/model from config', () => {
+  const d = REGISTRY['context-watchdog'];
+  assert.equal(d.builtin, true);
+  assert.equal(d.terminal, false);
+  assert.equal(d.healthPath, '/health');
+  assert.equal(d.bin, process.execPath);
+  const { args, env } = d.build({
+    port: 47851, upstreamBase: 'http://127.0.0.1:8787',
+    config: { contextWatchdog: { thresholdTokens: 250000, tailTurns: 8 } },
+  });
+  assert.match(args[0], /bin\/context-watchdog\.js$/);
+  assert.equal(env.PORT, '47851');
+  assert.equal(env.WATCHDOG_UPSTREAM, 'http://127.0.0.1:8787');
+  assert.equal(env.WATCHDOG_THRESHOLD, '250000');
+  assert.equal(env.WATCHDOG_TAIL_TURNS, '8');
+  assert.equal(env.WATCHDOG_MODEL, 'deepseek/deepseek-v4-flash'); // default
+});
+
+test('context-watchdog applies defaults when config omits the block', () => {
+  const { env } = REGISTRY['context-watchdog'].build({ port: 1, upstreamBase: 'http://x' });
+  assert.equal(env.WATCHDOG_THRESHOLD, '300000');
+  assert.equal(env.WATCHDOG_TAIL_TURNS, '6');
+});

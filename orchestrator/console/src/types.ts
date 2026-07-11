@@ -56,7 +56,6 @@ export type ChainStage = {
 };
 
 export type Stats = {
-  pxpipe?: unknown;
   headroom?: unknown;
   totals: { saved_pct?: number; events?: number };
 };
@@ -77,8 +76,8 @@ export type GraphQueryResult = {
 // ToggleRow mirrors the shape served by GET/POST /api/toggles
 // (orchestrator/src/control/http.ts `togglesView`). `live` reflects whether
 // the running process already honors the toggle without a restart;
-// `restartRequired` is `!live` (some stages, e.g. pxpipe/headroom, only
-// pick up config changes on restart).
+// `restartRequired` is `!live` (some stages, e.g. headroom, only pick up
+// config changes on restart).
 export type ToggleRow = {
   id: string;
   enabled: boolean;
@@ -86,12 +85,10 @@ export type ToggleRow = {
   restartRequired: boolean;
 };
 
-// RequestFeedEntry mirrors the merged per-hop feed served by GET
-// /api/requests (orchestrator/src/control/collector.ts `hopLog`), which
-// interleaves pxpipe-derived entries with per-hop reqlog entries
-// (orchestrator/src/control/reqlog.ts). The schema is loose/optional by
-// design — entries come from two different sources with only partial
-// field overlap — so every field must be rendered defensively.
+// RequestFeedEntry mirrors the per-hop feed served by GET /api/requests
+// (orchestrator/src/control/collector.ts `hopLog`, backed by per-hop reqlog
+// entries in orchestrator/src/control/reqlog.ts). The schema is
+// loose/optional by design, so every field must be rendered defensively.
 export type RequestFeedEntry = {
   ts?: string | number;
   timestamp?: string | number;

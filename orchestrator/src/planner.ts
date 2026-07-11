@@ -14,7 +14,7 @@ export function plan(config: Config, registry: Record<string, StageDescriptor> =
   const terminal = config.terminal;
   // Persisted toggles (config.toggles) drop a stage from the chain entirely at
   // plan time — this is how "restart required" toggles for third-party stages
-  // (pxpipe/headroom) actually take effect on the next `shuba run`.
+  // (headroom) actually take effect on the next `shuba run`.
   const toggles = config.toggles ?? {};
   const compressors = (config.compressors ?? []).filter((id) => toggles[id] !== false);
   const ports = config.ports ?? {};
@@ -24,9 +24,6 @@ export function plan(config: Config, registry: Record<string, StageDescriptor> =
   }
   for (const id of compressors) {
     if (!registry[id] || registry[id].terminal) errors.push(`unknown compressor id "${id}"`);
-  }
-  if (compressors.includes('pxpipe') && terminal !== 'anthropic') {
-    errors.push('pxpipe requires terminal "anthropic" — imaged content is Fable-only and non-Anthropic providers cannot read it');
   }
 
   // Build the ordered list of descriptor ids: compressors first, router appended when translating.

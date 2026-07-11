@@ -449,14 +449,14 @@ function withTogglesServer(fn: (base: string, paths: { togglesPath: string; chai
   });
 }
 
-test('GET /api/toggles returns all 5 known stages with correct live/restartRequired flags', async () => {
+test('GET /api/toggles returns all 4 known stages with correct live/restartRequired flags', async () => {
   await withTogglesServer(async (base) => {
     const res = await fetch(`${base}/api/toggles`);
     assert.equal(res.status, 200);
     const body: any = await res.json();
     assert.deepEqual(
       body.map((s: any) => s.id).sort(),
-      ['compact-router', 'context-watchdog', 'headroom', 'pxpipe', 'rate-limiter'],
+      ['compact-router', 'context-watchdog', 'headroom', 'rate-limiter'],
     );
     const byId = Object.fromEntries(body.map((s: any) => [s.id, s]));
     assert.equal(byId['compact-router'].live, true);
@@ -467,8 +467,6 @@ test('GET /api/toggles returns all 5 known stages with correct live/restartRequi
     assert.equal(byId['rate-limiter'].restartRequired, false);
     assert.equal(byId['headroom'].live, false);
     assert.equal(byId['headroom'].restartRequired, true);
-    assert.equal(byId['pxpipe'].live, false);
-    assert.equal(byId['pxpipe'].restartRequired, true);
     // default (no runtime.json written yet): every stage enabled
     for (const s of body) assert.equal(s.enabled, true);
   });

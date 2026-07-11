@@ -2,18 +2,18 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { plan } from '../src/planner.ts';
 
-test('compressors on anthropic terminal: pxpipe -> headroom -> api.anthropic.com', () => {
-  const r = plan({ terminal: 'anthropic', compressors: ['pxpipe', 'headroom'] });
+test('compressors on anthropic terminal: rate-limiter -> headroom -> api.anthropic.com', () => {
+  const r = plan({ terminal: 'anthropic', compressors: ['rate-limiter', 'headroom'] });
   assert.equal(r.ok, true);
-  assert.deepEqual(r.chain.map((s) => s.id), ['pxpipe', 'headroom']);
-  assert.equal(r.head.baseUrl, 'http://127.0.0.1:47821');
+  assert.deepEqual(r.chain.map((s) => s.id), ['rate-limiter', 'headroom']);
+  assert.equal(r.head.baseUrl, 'http://127.0.0.1:47840');
   assert.equal(r.head.requiresToken, false);
-  // pxpipe forwards to headroom; headroom forwards to real anthropic
-  assert.equal(r.chain[0].spawn.env.ANTHROPIC_UPSTREAM, 'http://127.0.0.1:8787');
+  // rate-limiter forwards to headroom; headroom forwards to real anthropic
+  assert.equal(r.chain[0].spawn.env.RATELIMIT_UPSTREAM, 'http://127.0.0.1:8787');
   assert.equal(r.chain[1].spawn.env.ANTHROPIC_TARGET_API_URL, 'https://api.anthropic.com');
 });
 
-test('route to codex with headroom: headroom -> router(codex); pxpipe excluded', () => {
+test('route to codex with headroom: headroom -> router(codex)', () => {
   const r = plan({ terminal: 'codex', compressors: ['headroom'] });
   assert.equal(r.ok, true);
   assert.deepEqual(r.chain.map((s) => s.id), ['headroom', 'router']);
@@ -33,12 +33,6 @@ test('route only: head is router with path suffix and requiresToken', () => {
   assert.deepEqual(r.chain.map((s) => s.id), ['router']);
   assert.equal(r.head.baseUrl, 'http://127.0.0.1:8080/api/latest/anthropic');
   assert.equal(r.head.requiresToken, true);
-});
-
-test('REJECT pxpipe with non-anthropic terminal', () => {
-  const r = plan({ terminal: 'codex', compressors: ['pxpipe'] });
-  assert.equal(r.ok, false);
-  assert.match(r.errors.join('\n'), /pxpipe.*Fable|Fable.*pxpipe/i);
 });
 
 test('REJECT unknown terminal', () => {
@@ -66,8 +60,8 @@ test('empty chain (anthropic terminal) = passthrough: head is api.anthropic.com,
 test('toggles drop stages at plan time; all off = passthrough', () => {
   const partial = plan({
     terminal: 'anthropic',
-    compressors: ['pxpipe', 'headroom'],
-    toggles: { pxpipe: false },
+    compressors: ['rate-limiter', 'headroom'],
+    toggles: { 'rate-limiter': false },
   });
   assert.equal(partial.ok, true);
   if (!partial.ok) return;
@@ -76,8 +70,8 @@ test('toggles drop stages at plan time; all off = passthrough', () => {
 
   const allOff = plan({
     terminal: 'anthropic',
-    compressors: ['pxpipe', 'headroom'],
-    toggles: { pxpipe: false, headroom: false },
+    compressors: ['rate-limiter', 'headroom'],
+    toggles: { 'rate-limiter': false, headroom: false },
   });
   assert.equal(allOff.ok, true);
   if (!allOff.ok) return;

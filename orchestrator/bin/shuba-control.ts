@@ -1,6 +1,4 @@
 #!/usr/bin/env bun
-import { homedir } from 'node:os';
-import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createEngine } from '../src/control/engine.ts';
 import { createControlHttp } from '../src/control/http.ts';
@@ -96,10 +94,7 @@ const graph = createGraph({ cwd: projectCwd, model: graphCfg.model, noMedia: gra
 const httpEnabled = process.env.SHUBA_CONTROL_HTTP === '1';
 
 if (httpEnabled) {
-  const collector = createCollector({
-    stages: DEFAULT_CHAIN_STAGES,
-    pxpipeEventsPath: join(homedir(), '.pxpipe', 'events.jsonl'),
-  });
+  const collector = createCollector({ stages: DEFAULT_CHAIN_STAGES });
   const config = { delegate: cfg, graph: graphCfg };
   const server = createControlHttp(engine, { graph, staticDir: CONSOLE_DIST, collector, config });
   server.on('error', (e) => {

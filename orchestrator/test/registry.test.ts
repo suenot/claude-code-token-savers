@@ -3,17 +3,6 @@ import assert from 'node:assert/strict';
 import { REGISTRY } from '../src/registry.ts';
 import type { Config } from '../src/types.ts';
 
-test('pxpipe descriptor wires PORT and ANTHROPIC_UPSTREAM', () => {
-  const d = REGISTRY.pxpipe;
-  assert.equal(d.bin, 'pxpipe');
-  assert.equal(d.terminal, false);
-  assert.equal(d.readerConstraint, 'fable-only');
-  assert.equal(d.healthPath, '/');
-  const { env } = d.build({ port: 47821, upstreamBase: 'http://127.0.0.1:8787' });
-  assert.equal(env.PORT, '47821');
-  assert.equal(env.ANTHROPIC_UPSTREAM, 'http://127.0.0.1:8787');
-});
-
 test('headroom descriptor wires --port and ANTHROPIC_TARGET_API_URL', () => {
   const d = REGISTRY.headroom;
   assert.equal(d.healthPath, '/health');

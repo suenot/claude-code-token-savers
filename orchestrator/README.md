@@ -10,8 +10,6 @@ Claude Code has exactly one `ANTHROPIC_BASE_URL` — one server can own it at a
 time. But the token-saving proxies each transform a request in a different,
 complementary way:
 
-- **[pxpipe](https://github.com/teamchong/pxpipe)** — renders the bulky, static
-  parts of a request (system prompt, tool docs, old history) to dense PNGs.
 - **[headroom](https://headroom-docs.vercel.app/docs)** — content-aware
   compression of request content (JSON, code, prose).
 - **[link-assistant/router](https://github.com/link-assistant/router)**
@@ -70,11 +68,10 @@ cd orchestrator && npm link
 ```
 
 This installs the `shuba` command (still distributed as an npm package, but
-executed by Bun). The three proxies shuba wraps are installed separately —
+executed by Bun). The external proxies shuba wraps are installed separately —
 shuba does not vendor or auto-install them:
 
 ```bash
-npm i -g pxpipe-proxy                    # pxpipe
 uv tool install "headroom-ai[proxy]"     # headroom — the [proxy] extra is REQUIRED
                                           # to get the `headroom proxy` subcommand
 # router: see https://github.com/link-assistant/router
@@ -82,8 +79,8 @@ uv tool install "headroom-ai[proxy]"     # headroom — the [proxy] extra is REQ
 #   or: docker pull konard/link-assistant-router
 ```
 
-`shuba doctor` (below) tells you which of the three are missing and prints
-the exact install command for each.
+`shuba doctor` (below) tells you which are missing and prints the exact
+install command for each.
 
 ## Config — `~/.shuba/chain.json`
 
@@ -97,8 +94,8 @@ the exact install command for each.
 
 - **`terminal`** — where the chain ends up talking:
   `anthropic | codex | gemini | qwen | openai-compatible`.
-- **`compressors`** — subset of `["headroom", "pxpipe", "compact-router",
-  "context-watchdog"]`, in chain order (first entry = closest to Claude Code,
+- **`compressors`** — subset of `["headroom", "compact-router",
+  "context-watchdog", "rate-limiter"]`, in chain order (first entry = closest to Claude Code,
   i.e. it sees the request first). `compact-router` is recommended **first**
   — see [below](#compact-router) — and `context-watchdog` should come
   **after** it — see [below](#context-watchdog).
@@ -107,8 +104,8 @@ the exact install command for each.
 - **`contextWatchdog`** — optional config block for the `context-watchdog`
   stage (thresholdTokens/tailTurns/model/baseUrl/envKey); see
   [below](#context-watchdog).
-- **`ports`** — optional per-proxy port overrides (`{ "pxpipe": 47821,
-  "headroom": 8787, "router": 8080 }`); registry defaults are used otherwise.
+- **`ports`** — optional per-proxy port overrides (`{ "headroom": 8787,
+  "router": 8080 }`); registry defaults are used otherwise.
 
 If the file is missing, shuba writes this default on first run
 (`terminal: "anthropic"`, `compressors: ["headroom"]`) and reports that it did
@@ -345,31 +342,24 @@ must come before any translation; the router translates Anthropic → another
 provider and is always the terminal (last) stage.
 
 ```
-(a) Claude Code → pxpipe → headroom → api.anthropic.com   # compress on Anthropic-Fable
-(b) Claude Code → headroom → router(codex)                # compress + route (pxpipe excluded)
-(c) Claude Code → router(codex)                            # route only
+(a) Claude Code → headroom → api.anthropic.com             # compress on Anthropic
+(b) Claude Code → headroom → router(codex)                 # compress + route
+(c) Claude Code → router(codex)                             # route only
 ```
 
 ### Chain rules
 
-1. **Compressors before translation.** `pxpipe` and `headroom` both speak the
-   Anthropic dialect on both sides; they must appear before the router, never
-   after.
+1. **Compressors before translation.** `headroom` speaks the Anthropic
+   dialect on both sides; it must appear before the router, never after.
 2. **Router is always last.** If `terminal != "anthropic"`, shuba
    auto-appends the router as the terminal stage; it can never appear
    mid-chain.
-3. **pxpipe requires `terminal: "anthropic"`.** pxpipe's reader is
-   Fable-only — the imaged request content it produces can only be read by
-   Anthropic's Fable model; a non-Anthropic terminal provider cannot read
-   it. `pxpipe` combined with any other terminal is a **hard validation
-   error**, reported and the whole run aborted **before any process is
-   started**.
 
 ## Conflict rule — one base-URL owner
 
 Only one running process may own `ANTHROPIC_BASE_URL` at a time. Without
-shuba, `pxpipe`, `headroom`, and `router` each expect to be that one process,
-so running two of them independently means the second one just never gets
+shuba, `headroom` and `router` each expect to be that one process, so
+running two of them independently means the second one just never gets
 traffic. shuba resolves this by making each proxy's own *upstream* setting
 point at the next stage instead — so several proxies run simultaneously, each
 one only fronting the next, and Claude Code only ever points at the single
@@ -383,7 +373,6 @@ Clother is a different piece of clothing entirely.
 ## Health checks
 
 Before handing off to `claude`, shuba waits for every stage to report
-healthy: `headroom` via `GET /health`, `router` via `GET /health`, `pxpipe`
-via `GET /` (it has no dedicated health route). If a stage doesn't become
-healthy within the timeout, shuba tears down every stage already started and
-reports which one failed.
+healthy: `headroom` via `GET /health`, `router` via `GET /health`. If a
+stage doesn't become healthy within the timeout, shuba tears down every
+stage already started and reports which one failed.

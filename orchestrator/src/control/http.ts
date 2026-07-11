@@ -22,7 +22,6 @@ type Graph = {
 type Collector = {
   chain(): Promise<unknown>;
   stats(): Promise<unknown>;
-  recentRequests(limit?: number): Promise<unknown>;
   hopLog(limit?: number): Promise<unknown>;
 };
 
@@ -96,10 +95,10 @@ function isLoopbackOrigin(origin: string): boolean {
 
 // Known shuba chain stages exposed via GET/POST /api/toggles. Our own stages
 // (compact-router, context-watchdog, rate-limiter) honor the toggle live, on
-// the next proxied request — no restart needed. pxpipe/headroom are
-// third-party stages wired into the process tree at startup, so flipping
-// their toggle only takes effect after a restart.
-const KNOWN_STAGES = ['compact-router', 'context-watchdog', 'headroom', 'pxpipe', 'rate-limiter'] as const;
+// the next proxied request — no restart needed. headroom is a third-party
+// stage wired into the process tree at startup, so flipping its toggle only
+// takes effect after a restart.
+const KNOWN_STAGES = ['compact-router', 'context-watchdog', 'headroom', 'rate-limiter'] as const;
 type KnownStage = (typeof KNOWN_STAGES)[number];
 const LIVE_STAGES = new Set<string>(['compact-router', 'context-watchdog', 'rate-limiter']);
 

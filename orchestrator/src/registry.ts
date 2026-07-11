@@ -7,18 +7,6 @@ const RATELIMIT_BIN = fileURLToPath(new URL('../bin/rate-limiter.ts', import.met
 const CONTROL_BIN = fileURLToPath(new URL('../bin/shuba-control.ts', import.meta.url));
 
 export const REGISTRY: Record<string, StageDescriptor> = {
-  pxpipe: {
-    id: 'pxpipe',
-    bin: 'pxpipe',
-    defaultPort: 47821,
-    dialect: 'anthropic',
-    terminal: false,
-    readerConstraint: 'fable-only',
-    healthPath: '/',
-    build({ port, upstreamBase }: BuildContext): BuildResult {
-      return { args: [], env: { PORT: String(port), ANTHROPIC_UPSTREAM: upstreamBase as string } };
-    },
-  },
   headroom: {
     id: 'headroom',
     bin: 'headroom',

@@ -16,7 +16,6 @@ export type StageDescriptor = {
   healthPath: string;
   builtin?: boolean;
   requiresToken?: boolean;
-  readerConstraint?: string;
   clientPathSuffix?: string;
   build(ctx: BuildContext): BuildResult;
 };

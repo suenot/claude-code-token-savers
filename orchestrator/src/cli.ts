@@ -32,7 +32,6 @@ function claudeSettingsPath(): string {
 }
 
 const INSTALL_HINT: Record<string, string> = {
-  pxpipe: 'npm i -g pxpipe-proxy',
   headroom: 'uv tool install "headroom-ai[proxy]"',
   router: 'cargo install link-assistant-router  (or: docker pull konard/link-assistant-router — repo: https://github.com/link-assistant/router)',
 };

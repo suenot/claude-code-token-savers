@@ -12,7 +12,11 @@ function baseUrlFor(descriptor: StageDescriptor, port: number): string {
 export function plan(config: Config, registry: Record<string, StageDescriptor> = REGISTRY): PlanResult {
   const errors: string[] = [];
   const terminal = config.terminal;
-  const compressors = config.compressors ?? [];
+  // Persisted toggles (config.toggles) drop a stage from the chain entirely at
+  // plan time — this is how "restart required" toggles for third-party stages
+  // (pxpipe/headroom) actually take effect on the next `shuba run`.
+  const toggles = config.toggles ?? {};
+  const compressors = (config.compressors ?? []).filter((id) => toggles[id] !== false);
   const ports = config.ports ?? {};
 
   if (!TERMINALS.has(terminal)) {
@@ -28,10 +32,6 @@ export function plan(config: Config, registry: Record<string, StageDescriptor> =
   // Build the ordered list of descriptor ids: compressors first, router appended when translating.
   const orderIds = [...compressors];
   if (terminal !== 'anthropic') orderIds.push('router');
-
-  if (orderIds.length === 0) {
-    errors.push('nothing to run — an anthropic terminal with no compressors is an empty chain');
-  }
 
   // Duplicate compressor ids.
   const seen = new Set<string>();
@@ -101,5 +101,10 @@ export function plan(config: Config, registry: Record<string, StageDescriptor> =
     });
   }
 
-  return { ok: true, chain, sidecars, head: { baseUrl: chain[0].baseUrl, requiresToken } };
+  // Empty chain (anthropic terminal, every compressor absent or toggled off):
+  // passthrough — the client talks straight to api.anthropic.com, sidecars still run.
+  const head = chain.length
+    ? { baseUrl: chain[0].baseUrl, requiresToken }
+    : { baseUrl: ANTHROPIC_UPSTREAM, requiresToken: false };
+  return { ok: true, chain, sidecars, head };
 }

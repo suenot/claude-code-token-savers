@@ -88,7 +88,12 @@ async function doRun(argv: string[]): Promise<number> {
     if (result.head.requiresToken) {
       apiKey = await mintToken(routerRootFromChain(result.chain) as string);
     }
-    console.error('shuba: chain up →', result.chain.map((s) => `${s.id}:${s.port}`).join(' → '));
+    console.error(
+      'shuba: chain up →',
+      result.chain.length
+        ? result.chain.map((s) => `${s.id}:${s.port}`).join(' → ')
+        : 'passthrough (no stages, direct to api.anthropic.com)',
+    );
     const controlSidecar = result.sidecars.find((s) => s.id === 'control');
     if (controlSidecar) {
       console.error(`shuba: console → http://127.0.0.1:${controlSidecar.port}/`);
@@ -175,7 +180,12 @@ async function doDoctor(): Promise<number> {
   const { config } = loadConfig();
   const result: PlanResult = plan(config);
   if (result.ok) {
-    console.log('\nplan: ' + result.chain.map((s) => `${s.id}:${s.port}`).join(' → '));
+    console.log(
+      '\nplan: ' +
+        (result.chain.length
+          ? result.chain.map((s) => `${s.id}:${s.port}`).join(' → ')
+          : 'passthrough (no stages)'),
+    );
     console.log('head: ' + result.head.baseUrl + (result.head.requiresToken ? '  (router token)' : ''));
   } else {
     console.log('\ninvalid chain:\n  - ' + result.errors.join('\n  - '));

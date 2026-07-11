@@ -53,10 +53,36 @@ test('REJECT unknown compressor id', () => {
   assert.match(r.errors.join('\n'), /bogus/);
 });
 
-test('REJECT empty chain (no compressors, anthropic terminal → nothing to run)', () => {
+test('empty chain (anthropic terminal) = passthrough: head is api.anthropic.com, sidecars still run', () => {
   const r = plan({ terminal: 'anthropic', compressors: [] });
-  assert.equal(r.ok, false);
-  assert.match(r.errors.join('\n'), /nothing to run|empty/i);
+  assert.equal(r.ok, true);
+  if (!r.ok) return;
+  assert.deepEqual(r.chain, []);
+  assert.equal(r.head.baseUrl, 'https://api.anthropic.com');
+  assert.equal(r.head.requiresToken, false);
+  assert.ok(r.sidecars.some((s) => s.id === 'control'));
+});
+
+test('toggles drop stages at plan time; all off = passthrough', () => {
+  const partial = plan({
+    terminal: 'anthropic',
+    compressors: ['pxpipe', 'headroom'],
+    toggles: { pxpipe: false },
+  });
+  assert.equal(partial.ok, true);
+  if (!partial.ok) return;
+  assert.deepEqual(partial.chain.map((s) => s.id), ['headroom']);
+  assert.equal(partial.head.baseUrl, 'http://127.0.0.1:8787');
+
+  const allOff = plan({
+    terminal: 'anthropic',
+    compressors: ['pxpipe', 'headroom'],
+    toggles: { pxpipe: false, headroom: false },
+  });
+  assert.equal(allOff.ok, true);
+  if (!allOff.ok) return;
+  assert.deepEqual(allOff.chain, []);
+  assert.equal(allOff.head.baseUrl, 'https://api.anthropic.com');
 });
 
 test('terminal router stage has no upstreamBase (uses provider, not a URL)', () => {

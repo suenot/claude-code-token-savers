@@ -145,6 +145,48 @@ test('GET /health with a spoofed cross-origin Host header returns 403 (DNS-rebin
   });
 });
 
+test('POST /api/delegate with a cross-origin Origin header returns 403 (CSRF guard)', async () => {
+  await withServer(async (base, engine) => {
+    const res = await fetch(`${base}/api/delegate`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', origin: 'http://evil.com' },
+      body: JSON.stringify({ task: 't' }),
+    });
+    assert.equal(res.status, 403);
+    assert.equal(engine.calls.length, 0);
+  });
+});
+
+test('POST /api/delegate without JSON content-type returns 415 (CSRF simple-request guard)', async () => {
+  await withServer(async (base, engine) => {
+    const res = await fetch(`${base}/api/delegate`, {
+      method: 'POST',
+      headers: { 'content-type': 'text/plain' },
+      body: JSON.stringify({ task: 't' }),
+    });
+    assert.equal(res.status, 415);
+    assert.equal(engine.calls.length, 0);
+  });
+});
+
+test('POST /api/delegate with no Origin header still works (missing Origin is allowed)', async () => {
+  await withServer(async (base) => {
+    const res = await fetch(`${base}/api/delegate`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ task: 't' }),
+    });
+    assert.equal(res.status, 200);
+  });
+});
+
+test('GET /health with a cross-origin Origin header returns 403 (Origin guard applies to all requests)', async () => {
+  await withServer(async (base) => {
+    const res = await fetch(`${base}/health`, { headers: { origin: 'http://evil.com' } });
+    assert.equal(res.status, 403);
+  });
+});
+
 test('isLoopbackHost accepts loopback hosts and rejects everything else', () => {
   assert.equal(isLoopbackHost('127.0.0.1:47830'), true);
   assert.equal(isLoopbackHost('localhost'), true);

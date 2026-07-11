@@ -48,6 +48,17 @@ export function isLoopbackHost(host?: string): boolean {
   return hostname === '127.0.0.1' || hostname === 'localhost' || hostname === '::1';
 }
 
+// Returns true when `origin` (a raw Origin header value, e.g.
+// "http://evil.com") resolves to a loopback host. Used to reject
+// cross-origin HTTP requests (CSRF), mirroring the WS upgrade Origin guard.
+function isLoopbackOrigin(origin: string): boolean {
+  try {
+    return isLoopbackHost(new URL(origin).hostname);
+  } catch {
+    return false;
+  }
+}
+
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
   const data = JSON.stringify(body);
   res.writeHead(status, { 'content-type': 'application/json; charset=utf-8' });
@@ -85,6 +96,19 @@ export function createControlHttp(engine: Engine, opts?: { staticDir?: string })
       return;
     }
 
+    // CSRF guard: reject cross-origin requests before routing. A browser tab
+    // on an attacker-controlled origin can send a same-Host, cross-origin
+    // "simple request" (e.g. POST with Content-Type: text/plain) that skips
+    // CORS preflight entirely — the Host guard above doesn't stop this since
+    // the attacker targets 127.0.0.1 directly. Non-browser clients (CLI,
+    // same-origin SPA fetch, tests) may omit Origin entirely — that's
+    // allowed.
+    const origin = req.headers.origin;
+    if (typeof origin === 'string' && origin.length > 0 && !isLoopbackOrigin(origin)) {
+      sendJson(res, 403, { error: 'forbidden: invalid origin' });
+      return;
+    }
+
     const url = new URL(req.url ?? '/', 'http://localhost');
     const pathname = url.pathname;
     const segments = pathname.split('/').filter(Boolean);
@@ -117,6 +141,14 @@ export function createControlHttp(engine: Engine, opts?: { staticDir?: string })
     }
 
     if (method === 'POST' && pathname === '/api/delegate') {
+      // Require an explicit JSON content-type. This forces cross-origin JS
+      // to trigger a CORS preflight (rather than sending a text/plain
+      // "simple request" that bypasses it), closing the CSRF bypass path.
+      const contentType = req.headers['content-type'];
+      if (typeof contentType !== 'string' || !contentType.toLowerCase().startsWith('application/json')) {
+        sendJson(res, 415, { error: 'content-type must be application/json' });
+        return;
+      }
       const raw = await readBody(req);
       let body: DelegateInput;
       try {
@@ -153,18 +185,10 @@ export function createControlHttp(engine: Engine, opts?: { staticDir?: string })
     // Non-browser clients (CLI, native WS, some fetch-based SPA clients) may
     // omit Origin entirely — that's allowed.
     const origin = req.headers.origin;
-    if (typeof origin === 'string' && origin.length > 0) {
-      let originHost: string | undefined;
-      try {
-        originHost = new URL(origin).hostname;
-      } catch {
-        originHost = undefined;
-      }
-      if (!originHost || !isLoopbackHost(originHost)) {
-        socket.write('HTTP/1.1 403 Forbidden\r\n\r\n');
-        socket.destroy();
-        return;
-      }
+    if (typeof origin === 'string' && origin.length > 0 && !isLoopbackOrigin(origin)) {
+      socket.write('HTTP/1.1 403 Forbidden\r\n\r\n');
+      socket.destroy();
+      return;
     }
 
     const url = new URL(req.url ?? '/', 'http://localhost');

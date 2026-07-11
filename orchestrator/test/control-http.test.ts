@@ -198,6 +198,10 @@ function stubCollector() {
       this.calls.push('stats');
       return { totals: { events: 3, saved_pct: 60 } };
     },
+    async recentRequests(limit?: number) {
+      this.calls.push(`recentRequests:${limit ?? ''}`);
+      return [{ id: 1 }];
+    },
   };
 }
 
@@ -233,6 +237,30 @@ test('GET /api/stats returns the collector stats output', async () => {
   } finally {
     server.close();
   }
+});
+
+test('GET /api/requests returns the collector recentRequests output', async () => {
+  const engine = stubEngine();
+  const collector = stubCollector();
+  const server = createControlHttp(engine as any, { collector: collector as any });
+  await new Promise<void>((resolve) => server.listen(0, resolve));
+  const addr = server.address();
+  const port = typeof addr === 'object' && addr ? addr.port : 0;
+  try {
+    const res = await fetch(`http://127.0.0.1:${port}/api/requests?limit=5`);
+    assert.equal(res.status, 200);
+    assert.deepEqual(await res.json(), [{ id: 1 }]);
+    assert.deepEqual(collector.calls, ['recentRequests:5']);
+  } finally {
+    server.close();
+  }
+});
+
+test('GET /api/requests returns 404 when no collector is configured', async () => {
+  await withServer(async (base) => {
+    const res = await fetch(`${base}/api/requests`);
+    assert.equal(res.status, 404);
+  });
 });
 
 test('GET /api/chain returns 404 when no collector is configured', async () => {

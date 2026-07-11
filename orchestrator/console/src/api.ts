@@ -58,6 +58,13 @@ export function getStats(): Promise<Stats> {
   return getJson<Stats>('/api/stats');
 }
 
+// getRequests fetches the most recent pxpipe events (newest-first). The
+// event schema is loose (pxpipe-defined, not orchestrator-defined) so the
+// return type is left as unknown[] — callers must render defensively.
+export function getRequests(limit = 100): Promise<unknown[]> {
+  return getJson<unknown[]>(`/api/requests?limit=${encodeURIComponent(String(limit))}`);
+}
+
 export function getJobs(): Promise<Job[]> {
   return getJson<Job[]>('/api/jobs');
 }

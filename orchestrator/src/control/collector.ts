@@ -20,6 +20,7 @@ export type CollectorOpts = {
 export type Collector = {
   chain(): Promise<ChainEntry[]>;
   stats(): Promise<StatsResult>;
+  recentRequests(limit?: number): Promise<unknown[]>;
 };
 
 // createCollector builds a runtime-agnostic (file + fetch only) collector
@@ -99,5 +100,30 @@ export function createCollector(opts: CollectorOpts): Collector {
     return result;
   }
 
-  return { chain, stats };
+  // recentRequests tails the pxpipe events.jsonl file (same source as
+  // readPxpipeEvents) and returns the last `limit` parsed JSON entries,
+  // newest-first. Each line is parsed defensively — a malformed line is
+  // skipped rather than failing the whole tail. A missing file (or no
+  // configured path) resolves to an empty array rather than throwing.
+  async function recentRequests(limit = 100): Promise<unknown[]> {
+    if (!opts.pxpipeEventsPath) return [];
+    let raw: string;
+    try {
+      raw = await readFile(opts.pxpipeEventsPath, 'utf8');
+    } catch {
+      return [];
+    }
+    const lines = raw.split('\n').filter((l) => l.trim().length > 0);
+    const entries: unknown[] = [];
+    for (const line of lines) {
+      try {
+        entries.push(JSON.parse(line));
+      } catch {
+        // Skip malformed lines rather than failing the whole tail.
+      }
+    }
+    return entries.slice(-limit).reverse();
+  }
+
+  return { chain, stats, recentRequests };
 }

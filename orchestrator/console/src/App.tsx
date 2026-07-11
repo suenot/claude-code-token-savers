@@ -5,8 +5,10 @@ import { JobsView } from './views/JobsView.tsx';
 import { GraphView } from './views/GraphView.tsx';
 import { ConfigView } from './views/ConfigView.tsx';
 import { SavingsView } from './views/SavingsView.tsx';
+import { RequestFeedView } from './views/RequestFeedView.tsx';
+import { MonitorsView } from './views/MonitorsView.tsx';
 
-const TABS = ['Chain', 'Harnesses', 'Jobs', 'Graph', 'Config', 'Savings'] as const;
+const TABS = ['Chain', 'Harnesses', 'Jobs', 'Graph', 'Config', 'Savings', 'Requests', 'Monitors'] as const;
 type Tab = (typeof TABS)[number];
 
 function renderTab(tab: Tab) {
@@ -23,6 +25,10 @@ function renderTab(tab: Tab) {
       return <ConfigView />;
     case 'Savings':
       return <SavingsView />;
+    case 'Requests':
+      return <RequestFeedView />;
+    case 'Monitors':
+      return <MonitorsView />;
     default:
       return null;
   }

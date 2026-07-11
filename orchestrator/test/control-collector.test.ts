@@ -106,3 +106,51 @@ test('stats() omits headroom when the fetch fails', async () => {
   const stats = await collector.stats();
   assert.equal(stats.headroom, undefined);
 });
+
+test('recentRequests() returns the last N parsed entries newest-first', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'shuba-collector-'));
+  const eventsPath = join(dir, 'events.jsonl');
+  try {
+    await writeFile(
+      eventsPath,
+      [
+        JSON.stringify({ id: 1 }),
+        JSON.stringify({ id: 2 }),
+        JSON.stringify({ id: 3 }),
+        JSON.stringify({ id: 4 }),
+        JSON.stringify({ id: 5 }),
+      ].join('\n') + '\n',
+    );
+    const collector = createCollector({ pxpipeEventsPath: eventsPath });
+    const recent = await collector.recentRequests(3);
+    assert.deepEqual(recent, [{ id: 5 }, { id: 4 }, { id: 3 }]);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test('recentRequests() returns an empty array and does not throw when the file is missing', async () => {
+  const collector = createCollector({ pxpipeEventsPath: '/nonexistent/path/events.jsonl' });
+  assert.deepEqual(await collector.recentRequests(3), []);
+});
+
+test('recentRequests() returns an empty array when nothing is configured', async () => {
+  const collector = createCollector({});
+  assert.deepEqual(await collector.recentRequests(), []);
+});
+
+test('recentRequests() skips a malformed line', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'shuba-collector-'));
+  const eventsPath = join(dir, 'events.jsonl');
+  try {
+    await writeFile(
+      eventsPath,
+      [JSON.stringify({ id: 1 }), 'not json', JSON.stringify({ id: 2 })].join('\n') + '\n',
+    );
+    const collector = createCollector({ pxpipeEventsPath: eventsPath });
+    const recent = await collector.recentRequests(10);
+    assert.deepEqual(recent, [{ id: 2 }, { id: 1 }]);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});

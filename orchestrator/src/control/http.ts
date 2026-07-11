@@ -20,6 +20,7 @@ type Graph = {
 type Collector = {
   chain(): Promise<unknown>;
   stats(): Promise<unknown>;
+  recentRequests(limit?: number): Promise<unknown>;
 };
 
 const SECRET_KEY_RE = /apikey|secret|token/i;
@@ -247,6 +248,18 @@ export function createControlHttp(
         return;
       }
       sendJson(res, 200, await collector.stats());
+      return;
+    }
+
+    if (method === 'GET' && pathname === '/api/requests') {
+      if (!collector) {
+        sendJson(res, 404, { error: 'collector not enabled' });
+        return;
+      }
+      const limitParam = url.searchParams.get('limit');
+      const parsedLimit = limitParam !== null ? Number.parseInt(limitParam, 10) : NaN;
+      const limit = Number.isFinite(parsedLimit) && parsedLimit > 0 ? parsedLimit : undefined;
+      sendJson(res, 200, await collector.recentRequests(limit));
       return;
     }
 

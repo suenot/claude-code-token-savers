@@ -128,6 +128,10 @@ export const REGISTRY: Record<string, StageDescriptor> = {
         args: [CONTROL_BIN],
         env: {
           PORT: String(port),
+          // Marks this as the HTTP-serving sidecar instance (as opposed to
+          // the stdio-MCP instance Claude Code spawns via .mcp.json, which
+          // gets neither this env var nor PORT). See bin/shuba-control.ts.
+          SHUBA_CONTROL_HTTP: '1',
           DELEGATE_JSON: JSON.stringify(delegate),
           OPENROUTER_API_KEY: process.env.OPENROUTER_API_KEY ?? '',
         },

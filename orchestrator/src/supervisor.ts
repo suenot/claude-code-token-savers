@@ -53,10 +53,12 @@ export async function up(
     spawnImpl = spawn as unknown as SpawnLike,
     fetchImpl = fetch as FetchLike,
     healthOpts = {},
+    sidecars = [],
   }: {
     spawnImpl?: SpawnLike;
     fetchImpl?: FetchLike;
     healthOpts?: Record<string, unknown>;
+    sidecars?: PlannedStage[];
   } = {},
 ): Promise<ChainHandle> {
   const started: Array<{ id: string; port: number; child: SpawnedProcess }> = [];
@@ -70,6 +72,9 @@ export async function up(
     }
   };
   try {
+    // The chain is the critical path (proxy traffic flows through it to
+    // reach Claude) — any stage failing to start/become healthy tears down
+    // everything started so far and rethrows, exactly as before.
     for (const stage of chain) {
       const child = spawnImpl(stage.spawn.bin, stage.spawn.args, {
         env: { ...process.env, ...stage.spawn.env },
@@ -82,6 +87,26 @@ export async function up(
     await down();
     throw err;
   }
+
+  // Sidecars run alongside the chain (e.g. `control`) but are best-effort:
+  // they don't forward chain traffic, so a sidecar that fails to spawn or
+  // never becomes healthy must not tear down the chain or abort `up()`. A
+  // sidecar whose process DID start (even if health never succeeded) is
+  // still tracked in `started` so `down()` cleans it up later.
+  for (const stage of sidecars) {
+    try {
+      const child = spawnImpl(stage.spawn.bin, stage.spawn.args, {
+        env: { ...process.env, ...stage.spawn.env },
+        stdio: ['ignore', 'inherit', 'inherit'],
+      });
+      started.push({ id: stage.id, port: stage.port, child });
+      await waitForHealth(stage.healthUrl, { ...healthOpts, fetchImpl });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      process.stderr.write(`[shuba] warning: sidecar "${stage.id}" failed to start: ${message}\n`);
+    }
+  }
+
   return {
     down,
     status: () => started.map((s) => ({ id: s.id, pid: s.child.pid as number | undefined, port: s.port })),

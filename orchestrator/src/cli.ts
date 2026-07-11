@@ -1,12 +1,25 @@
 import { execSync } from 'node:child_process';
+import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { loadConfig } from './config.ts';
 import { plan } from './planner.ts';
 import { up } from './supervisor.ts';
 import { mintToken } from './router-bootstrap.ts';
 import { runClaude } from './launcher.ts';
 import { REGISTRY } from './registry.ts';
+import { registerMcp, unregisterMcp } from './control/mcp-register.ts';
+import { detectHarnesses } from './control/harnesses.ts';
 import type { PlanResult, PlannedStage, ChainHandle } from './types.ts';
 import pkg from '../package.json' with { type: 'json' };
+
+const CONTROL_BIN = fileURLToPath(new URL('../bin/shuba-control.ts', import.meta.url));
+
+// Claude Code MCP config for `shuba run` auto-registration. Defaults to a
+// project-level .mcp.json in the launch cwd so the shuba-control server is
+// picked up with zero user configuration.
+function mcpConfigPath(): string {
+  return join(process.cwd(), '.mcp.json');
+}
 
 const INSTALL_HINT: Record<string, string> = {
   pxpipe: 'npm i -g pxpipe-proxy',
@@ -46,7 +59,12 @@ async function doRun(argv: string[]): Promise<number> {
     console.error('shuba: invalid chain:\n  - ' + result.errors.join('\n  - '));
     return 1;
   }
-  const handle: ChainHandle = await up(result.chain);
+  const handle: ChainHandle = await up(result.chain, { sidecars: result.sidecars });
+  try {
+    registerMcp(mcpConfigPath(), { command: 'bun', args: [CONTROL_BIN] });
+  } catch (err) {
+    console.error('shuba: warning: failed to register shuba-control MCP server:', (err as Error).message);
+  }
   try {
     let apiKey;
     if (result.head.requiresToken) {
@@ -59,6 +77,11 @@ async function doRun(argv: string[]): Promise<number> {
       const finish = async (code: number | null | undefined) => {
         if (settled) return;
         settled = true;
+        try {
+          unregisterMcp(mcpConfigPath());
+        } catch (err) {
+          console.error('shuba: warning: failed to unregister shuba-control MCP server:', (err as Error).message);
+        }
         await handle.down();
         resolve(code ?? 0);
       };
@@ -72,6 +95,11 @@ async function doRun(argv: string[]): Promise<number> {
       });
     });
   } catch (err) {
+    try {
+      unregisterMcp(mcpConfigPath());
+    } catch (unregErr) {
+      console.error('shuba: warning: failed to unregister shuba-control MCP server:', (unregErr as Error).message);
+    }
     await handle.down();
     throw err;
   }
@@ -84,7 +112,7 @@ async function doUp(): Promise<number> {
     console.error('shuba: invalid chain:\n  - ' + result.errors.join('\n  - '));
     return 1;
   }
-  const handle: ChainHandle = await up(result.chain);
+  const handle: ChainHandle = await up(result.chain, { sidecars: result.sidecars });
   console.error('shuba: chain up:', JSON.stringify(handle.status()));
   console.error('shuba: Ctrl-C to tear down.');
   for (const sig of ['SIGINT', 'SIGTERM'] as const) {
@@ -120,6 +148,14 @@ async function doDoctor(): Promise<number> {
   } else {
     console.log('\ninvalid chain:\n  - ' + result.errors.join('\n  - '));
   }
+
+  const controlEnabled = config.control?.enabled !== false;
+  console.log(`\ncontrol: ${controlEnabled ? 'enabled' : 'disabled'} (shuba-control sidecar)`);
+  console.log('harnesses:');
+  for (const h of detectHarnesses()) {
+    console.log(`  ${h.installed ? 'ok ' : 'MISSING'}  ${h.id} (${h.bin})`);
+  }
+
   return 0;
 }
 

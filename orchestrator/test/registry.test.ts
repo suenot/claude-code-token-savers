@@ -79,3 +79,26 @@ test('context-watchdog applies defaults when config omits the block', () => {
   assert.equal(env.WATCHDOG_THRESHOLD, '300000');
   assert.equal(env.WATCHDOG_TAIL_TURNS, '6');
 });
+
+test('control descriptor is a builtin node sidecar wired from delegate config', () => {
+  const d = REGISTRY.control;
+  assert.equal(d.builtin, true);
+  assert.equal(d.terminal, false);
+  assert.equal(d.defaultPort, 47830);
+  assert.equal(d.healthPath, '/health');
+  assert.equal(d.bin, process.execPath);
+  const { args, env } = d.build({
+    port: 47830,
+    config: { delegate: { default: { harness: 'opencode', model: 'deepseek/deepseek-v4-flash' } } } as Config,
+  });
+  assert.match(args[0], /bin\/shuba-control\.ts$/);
+  assert.equal(env.PORT, '47830');
+  const parsed = JSON.parse(env.DELEGATE_JSON);
+  assert.deepEqual(parsed.default, { harness: 'opencode', model: 'deepseek/deepseek-v4-flash' });
+});
+
+test('control applies a default delegate config when config omits delegate', () => {
+  const { env } = REGISTRY.control.build({ port: 47830 });
+  const parsed = JSON.parse(env.DELEGATE_JSON);
+  assert.deepEqual(parsed.default, { harness: 'opencode', model: 'deepseek/deepseek-v4-flash' });
+});

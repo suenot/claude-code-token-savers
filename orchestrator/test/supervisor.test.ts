@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { waitForHealth, up } from '../src/supervisor.js';
+import { waitForHealth, up } from '../src/supervisor.ts';
+import type { PlannedStage } from '../src/types.ts';
 
 test('waitForHealth resolves once fetch returns ok', async () => {
   let calls = 0;
@@ -32,15 +33,30 @@ test('waitForHealth rejects after timeout', async () => {
 });
 
 test('up tears down already-started stages in reverse order on health failure, and down() is idempotent', async () => {
-  const killed = [];
-  const makeChild = (id) => ({ pid: id, kill: () => killed.push(id) });
-  const children = { s1: makeChild('s1'), s2: makeChild('s2') };
-  const spawnImpl = (bin) => children[bin];
+  const killed: string[] = [];
+  const makeChild = (id: string) => ({ pid: id, kill: () => killed.push(id) });
+  const children: Record<string, ReturnType<typeof makeChild>> = {
+    s1: makeChild('s1'),
+    s2: makeChild('s2'),
+  };
+  const spawnImpl = (bin: string) => children[bin];
   // s1 healthy, s2 never healthy -> up should fail and tear down s2 then s1
-  const fetchImpl = async (url) => ({ ok: url.includes('1') });
-  const chain = [
-    { id: 's1', port: 1, healthUrl: 'http://x/1', spawn: { bin: 's1', args: [], env: {} } },
-    { id: 's2', port: 2, healthUrl: 'http://x/2', spawn: { bin: 's2', args: [], env: {} } },
+  const fetchImpl = async (url: string) => ({ ok: url.includes('1') });
+  const chain: PlannedStage[] = [
+    {
+      id: 's1',
+      port: 1,
+      baseUrl: 'http://x',
+      healthUrl: 'http://x/1',
+      spawn: { bin: 's1', args: [], env: {} },
+    },
+    {
+      id: 's2',
+      port: 2,
+      baseUrl: 'http://x',
+      healthUrl: 'http://x/2',
+      spawn: { bin: 's2', args: [], env: {} },
+    },
   ];
   await assert.rejects(
     up(chain, { spawnImpl, fetchImpl, healthOpts: { timeoutMs: 20, intervalMs: 1 } }),

@@ -271,6 +271,14 @@ export function createControlHttp(
     if (method === 'GET' && staticDir) {
       const served = await tryServeStatic(staticDir, pathname, res);
       if (served) return;
+      // SPA fallback: any non-/api GET route that doesn't match a static
+      // asset falls back to index.html (client-side router owns it). Known
+      // /api/* routes already returned above; an *unmatched* /api/* path
+      // (segments[0] === 'api') is a genuine 404, not a SPA route.
+      if (segments[0] !== 'api') {
+        const servedIndex = await tryServeStatic(staticDir, '/', res);
+        if (servedIndex) return;
+      }
     }
 
     sendJson(res, 404, { error: `not found: ${method} ${pathname}` });

@@ -311,6 +311,33 @@ shuba down                     # guidance only (see below)
   the foreground `run`/`up` process, so tearing it down means stopping that
   process (Ctrl-C, or letting `claude` exit on its own).
 
+## Console
+
+`shuba-control` (the sidecar `shuba run`/`up` starts alongside the chain when
+`control.enabled` isn't `false`) doubles as a small HTTP server for a
+browser-based management console — chain/health status, delegated-job logs,
+the graph view, config (secrets redacted), and token-savings stats.
+
+The console is a static React SPA (`orchestrator/console`) that the control
+server serves from `console/dist`. It is **not** committed — build it once
+before running shuba:
+
+```bash
+cd orchestrator
+bun run console:build   # outputs console/dist/{index.html,main.js}
+```
+
+Then `shuba run` (or `shuba up`) prints the console URL to stderr once the
+chain is up, e.g. `shuba: console → http://127.0.0.1:47830/`; `shuba doctor`
+prints the same URL under the `control:` line. Open it in a browser — it
+talks to the control server's `/api/*` endpoints directly (loopback-only, no
+extra auth needed).
+
+If `console/dist` doesn't exist yet, the control server still runs fine —
+`/api/*` endpoints work as normal, only the SPA routes 404 until you build it.
+
+See [`console/README.md`](console/README.md) for the SPA's own dev workflow.
+
 ## Valid chains
 
 The chain has a fixed shape: compressors operate on the Anthropic dialect and

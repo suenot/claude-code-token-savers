@@ -89,6 +89,10 @@ async function doRun(argv: string[]): Promise<number> {
       apiKey = await mintToken(routerRootFromChain(result.chain) as string);
     }
     console.error('shuba: chain up →', result.chain.map((s) => `${s.id}:${s.port}`).join(' → '));
+    const controlSidecar = result.sidecars.find((s) => s.id === 'control');
+    if (controlSidecar) {
+      console.error(`shuba: console → http://127.0.0.1:${controlSidecar.port}/`);
+    }
     const child = runClaude(result.head, { apiKey, claudeArgs: splitClaudeArgs(argv) });
     return await new Promise((resolve) => {
       let settled = false;
@@ -179,6 +183,12 @@ async function doDoctor(): Promise<number> {
 
   const controlEnabled = config.control?.enabled !== false;
   console.log(`\ncontrol: ${controlEnabled ? 'enabled' : 'disabled'} (shuba-control sidecar)`);
+  if (controlEnabled && result.ok) {
+    const controlSidecar = result.sidecars.find((s) => s.id === 'control');
+    if (controlSidecar) {
+      console.log(`console: http://127.0.0.1:${controlSidecar.port}/`);
+    }
+  }
   console.log('harnesses:');
   for (const h of detectHarnesses()) {
     console.log(`  ${h.installed ? 'ok ' : 'MISSING'}  ${h.id} (${h.bin})`);

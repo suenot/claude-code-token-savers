@@ -1,6 +1,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import http from 'node:http';
+import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { createControlHttp, isLoopbackHost } from '../src/control/http.ts';
 
 function stubEngine() {
@@ -322,6 +325,102 @@ test('GET /api/config with a cross-origin Origin header returns 403 (Origin guar
   } finally {
     server.close();
   }
+});
+
+function withStaticDir(fn: (dir: string) => Promise<void>): Promise<void> {
+  const dir = mkdtempSync(join(tmpdir(), 'shuba-console-'));
+  writeFileSync(join(dir, 'index.html'), '<html><body><div id="root">spa-index</div></body></html>');
+  writeFileSync(join(dir, 'main.js'), 'console.log("spa-main")');
+  return fn(dir).finally(() => rmSync(dir, { recursive: true, force: true }));
+}
+
+test('GET / serves index.html from staticDir', async () => {
+  await withStaticDir(async (dir) => {
+    const engine = stubEngine();
+    const server = createControlHttp(engine as any, { staticDir: dir });
+    await new Promise<void>((resolve) => server.listen(0, resolve));
+    const addr = server.address();
+    const port = typeof addr === 'object' && addr ? addr.port : 0;
+    try {
+      const res = await fetch(`http://127.0.0.1:${port}/`);
+      assert.equal(res.status, 200);
+      const body = await res.text();
+      assert.match(body, /spa-index/);
+    } finally {
+      server.close();
+    }
+  });
+});
+
+test('GET /some/spa/route falls back to index.html (SPA client-routing)', async () => {
+  await withStaticDir(async (dir) => {
+    const engine = stubEngine();
+    const server = createControlHttp(engine as any, { staticDir: dir });
+    await new Promise<void>((resolve) => server.listen(0, resolve));
+    const addr = server.address();
+    const port = typeof addr === 'object' && addr ? addr.port : 0;
+    try {
+      const res = await fetch(`http://127.0.0.1:${port}/some/spa/route`);
+      assert.equal(res.status, 200);
+      const body = await res.text();
+      assert.match(body, /spa-index/);
+    } finally {
+      server.close();
+    }
+  });
+});
+
+test('GET /main.js serves the real asset (not the SPA fallback)', async () => {
+  await withStaticDir(async (dir) => {
+    const engine = stubEngine();
+    const server = createControlHttp(engine as any, { staticDir: dir });
+    await new Promise<void>((resolve) => server.listen(0, resolve));
+    const addr = server.address();
+    const port = typeof addr === 'object' && addr ? addr.port : 0;
+    try {
+      const res = await fetch(`http://127.0.0.1:${port}/main.js`);
+      assert.equal(res.status, 200);
+      const body = await res.text();
+      assert.match(body, /spa-main/);
+    } finally {
+      server.close();
+    }
+  });
+});
+
+test('GET /api/harnesses still returns JSON when staticDir is configured', async () => {
+  await withStaticDir(async (dir) => {
+    const engine = stubEngine();
+    const server = createControlHttp(engine as any, { staticDir: dir });
+    await new Promise<void>((resolve) => server.listen(0, resolve));
+    const addr = server.address();
+    const port = typeof addr === 'object' && addr ? addr.port : 0;
+    try {
+      const res = await fetch(`http://127.0.0.1:${port}/api/harnesses`);
+      assert.equal(res.status, 200);
+      assert.deepEqual(await res.json(), [{ id: 'opencode', bin: 'opencode', installed: true }]);
+    } finally {
+      server.close();
+    }
+  });
+});
+
+test('GET /api/unknown returns 404 (not the SPA fallback) when staticDir is configured', async () => {
+  await withStaticDir(async (dir) => {
+    const engine = stubEngine();
+    const server = createControlHttp(engine as any, { staticDir: dir });
+    await new Promise<void>((resolve) => server.listen(0, resolve));
+    const addr = server.address();
+    const port = typeof addr === 'object' && addr ? addr.port : 0;
+    try {
+      const res = await fetch(`http://127.0.0.1:${port}/api/unknown`);
+      assert.equal(res.status, 404);
+      const body: any = await res.json();
+      assert.ok(body.error);
+    } finally {
+      server.close();
+    }
+  });
 });
 
 test('isLoopbackHost accepts loopback hosts and rejects everything else', () => {

@@ -1,9 +1,31 @@
 #!/usr/bin/env bun
+import { homedir } from 'node:os';
+import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { createEngine } from '../src/control/engine.ts';
 import { createControlHttp } from '../src/control/http.ts';
+import { createCollector, type ChainStage } from '../src/control/collector.ts';
 import { createMcpServer, connectStdio } from '../src/control/mcp.ts';
 import { createGraph } from '../src/control/graph.ts';
+import { REGISTRY } from '../src/registry.ts';
 import type { DelegateConfig, Config } from '../src/types.ts';
+
+// console/dist is the built SPA (see `bun run console:build`); resolved
+// relative to this file so it works both run from source (bun bin/...) and
+// from an installed package layout.
+const CONSOLE_DIST = fileURLToPath(new URL('../console/dist', import.meta.url));
+
+// Default chain-stage health probes for the collector's GET /api/chain. These
+// mirror the ports/health paths declared in src/registry.ts for every stage
+// that can appear in a proxy chain (the 'control' sidecar itself is excluded
+// — it's not part of the request chain). Real per-run port overrides
+// (config.ports) aren't threaded through to this sidecar process today, so
+// this is a best-effort default set — a follow-up could pass the resolved
+// PlannedStage list via env if per-run ports diverge from the registry
+// defaults.
+const DEFAULT_CHAIN_STAGES: ChainStage[] = Object.values(REGISTRY)
+  .filter((d) => d.id !== 'control')
+  .map((d) => ({ id: d.id, port: d.defaultPort, healthUrl: `http://127.0.0.1:${d.defaultPort}${d.healthPath}` }));
 
 const DEFAULT_CFG: DelegateConfig = {
   default: { harness: 'opencode', model: 'deepseek/deepseek-v4-flash' },
@@ -52,7 +74,12 @@ const graph = createGraph({ cwd: projectCwd, model: graphCfg.model, noMedia: gra
 const httpEnabled = process.env.SHUBA_CONTROL_HTTP === '1';
 
 if (httpEnabled) {
-  const server = createControlHttp(engine, { graph });
+  const collector = createCollector({
+    stages: DEFAULT_CHAIN_STAGES,
+    pxpipeEventsPath: join(homedir(), '.pxpipe', 'events.jsonl'),
+  });
+  const config = { delegate: cfg, graph: graphCfg };
+  const server = createControlHttp(engine, { graph, staticDir: CONSOLE_DIST, collector, config });
   server.on('error', (e) => {
     process.stderr.write(`[shuba-control] http error: ${e.message}\n`);
   });

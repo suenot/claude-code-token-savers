@@ -64,6 +64,41 @@ test('compact-fingerprinted request passes through untouched', async () => {
   });
 });
 
+test('grown-but-small tail reuses the sticky summary (no re-summarize)', async () => {
+  const extCalls = [];
+  const fetchImpl = async (url) => {
+    if (url.includes('ext.test')) { extCalls.push(1); return { ok: true, json: async () => ({ choices: [{ message: { content: 'SUM' } }] }) }; }
+    return { ok: true, status: 200, headers: new Headers(), body: null };
+  };
+  await withServer({ fetchImpl }, async (base) => {
+    // turn 1: over threshold → summarize once
+    await fetch(`${base}/v1/messages`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(overBody()) });
+    assert.equal(extCalls.length, 1);
+    // turn 2: same conversation + 2 more SMALL tail turns (tail still tiny) → reuse, no 2nd summarize
+    const grown = overBody();
+    grown.messages.push({ role: 'user', content: 'q' }, { role: 'assistant', content: 'a' });
+    await fetch(`${base}/v1/messages`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(grown) });
+    assert.equal(extCalls.length, 1);
+  });
+});
+
+test('tail regrowing past threshold advances the cut (re-summarize)', async () => {
+  const extCalls = [];
+  const fetchImpl = async (url) => {
+    if (url.includes('ext.test')) { extCalls.push(1); return { ok: true, json: async () => ({ choices: [{ message: { content: 'SUM' } }] }) }; }
+    return { ok: true, status: 200, headers: new Headers(), body: null };
+  };
+  await withServer({ fetchImpl }, async (base) => {
+    await fetch(`${base}/v1/messages`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(overBody()) });
+    assert.equal(extCalls.length, 1);
+    // append a BIG tail turn so the live tail alone exceeds threshold → must advance
+    const grown = overBody();
+    grown.messages.push({ role: 'user', content: big }, { role: 'assistant', content: big });
+    await fetch(`${base}/v1/messages`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(grown) });
+    assert.equal(extCalls.length, 2);
+  });
+});
+
 test('summarize failure forwards the ORIGINAL body', async () => {
   let forwardedBody = null;
   const fetchImpl = async (url, opts) => {

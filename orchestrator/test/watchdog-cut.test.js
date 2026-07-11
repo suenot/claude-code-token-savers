@@ -30,3 +30,8 @@ test('returns null when nothing is older than the tail', () => {
   const msgs = [U('1'), A('2')];
   assert.equal(planCut(msgs, 5), null); // cut would be 0 → older empty
 });
+
+test('returns null for non-positive tailTurns (no crash)', () => {
+  assert.equal(planCut([{ role: 'user', content: '1' }, { role: 'assistant', content: '2' }], 0), null);
+  assert.equal(planCut([{ role: 'user', content: '1' }], -3), null);
+});

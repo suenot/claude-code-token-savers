@@ -3,6 +3,7 @@ function startsWithToolResult(m) {
 }
 
 export function planCut(messages, tailTurns) {
+  if (!(tailTurns > 0)) return null;
   const msgs = Array.isArray(messages) ? messages : [];
   let cut = Math.max(0, msgs.length - tailTurns);
   while (cut > 0 && (msgs[cut].role !== 'user' || startsWithToolResult(msgs[cut]))) {

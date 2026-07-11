@@ -13,17 +13,28 @@ export function createInterceptor({ port, upstream, model, baseUrl, apiKey, fetc
     const out = Object.fromEntries((up.headers && up.headers.entries) ? up.headers.entries() : []);
     delete out['content-encoding']; delete out['content-length']; delete out['transfer-encoding'];
     res.writeHead(up.status || 200, out);
-    if (up.body) Readable.fromWeb(up.body).pipe(res);
-    else res.end();
+    if (up.body) {
+      const stream = Readable.fromWeb(up.body);
+      stream.on('error', () => { try { res.destroy(); } catch { /* already closed */ } });
+      stream.pipe(res);
+    } else res.end();
   }
 
   async function serveCompact(body, res) {
     const oreq = anthropicToOpenAI(body, model);
-    const r = await fetchImpl(`${baseUrl}/chat/completions`, {
-      method: 'POST',
-      headers: { authorization: `Bearer ${apiKey}`, 'content-type': 'application/json' },
-      body: JSON.stringify({ ...oreq, stream: false }),
-    });
+    const ac = new AbortController();
+    const timer = setTimeout(() => ac.abort(), 60000);
+    let r;
+    try {
+      r = await fetchImpl(`${baseUrl}/chat/completions`, {
+        method: 'POST',
+        headers: { authorization: `Bearer ${apiKey}`, 'content-type': 'application/json' },
+        body: JSON.stringify({ ...oreq, stream: false }),
+        signal: ac.signal,
+      });
+    } finally {
+      clearTimeout(timer);
+    }
     if (!r.ok) throw new Error(`external ${r.status}`);
     const data = await r.json();
     const text = data && data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content;

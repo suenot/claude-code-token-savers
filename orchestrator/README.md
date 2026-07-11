@@ -154,17 +154,21 @@ efficient one). An optional `compactRouter` block tunes the model:
   "terminal": "anthropic",
   "compressors": ["compact-router", "headroom"],
   "compactRouter": {
-    "model": "deepseek/deepseek-v4-flash",
-    "baseUrl": "https://openrouter.ai/api/v1",
-    "envKey": "OPENROUTER_API_KEY"
+    "model": "a8e/a8e-1.0-pro",
+    "baseUrl": "http://localhost:8080/v1",
+    "envKey": "A8E_API_KEY"
   },
   "ports": {}
 }
 ```
 
 Defaults (used when `compactRouter` is omitted, or any of its fields are):
-`deepseek/deepseek-v4-flash` via OpenRouter, using the `OPENROUTER_API_KEY`
-environment variable.
+`a8e/a8e-1.0-pro` (white-label for Kimi K2.6) via the local a8e router at
+`http://localhost:8080/v1` (see `/Users/suenot/projects/server/llm/README.md`),
+using the `A8E_API_KEY` environment variable if set — the local router runs
+with `A8E_REQUIRE_AUTH=false`, so any non-empty key satisfies it and shuba
+falls back to a placeholder key automatically when the base URL is
+`localhost`/`127.0.0.1` and the env var isn't set.
 
 ### The fallback guarantee
 
@@ -243,23 +247,24 @@ and model:
   "terminal": "anthropic",
   "compressors": ["compact-router", "context-watchdog"],
   "compactRouter": {
-    "model": "deepseek/deepseek-v4-flash",
-    "baseUrl": "https://openrouter.ai/api/v1",
-    "envKey": "OPENROUTER_API_KEY"
+    "model": "a8e/a8e-1.0-pro",
+    "baseUrl": "http://localhost:8080/v1",
+    "envKey": "A8E_API_KEY"
   },
   "contextWatchdog": {
     "thresholdTokens": 300000,
     "tailTurns": 6,
-    "model": "deepseek/deepseek-v4-flash"
+    "model": "a8e/a8e-1.0-pro"
   },
   "ports": {}
 }
 ```
 
 Defaults (used when `contextWatchdog` is omitted, or any of its fields are):
-`thresholdTokens: 300000`, `tailTurns: 6`, model `deepseek/deepseek-v4-flash`
-via OpenRouter, using the `OPENROUTER_API_KEY` environment variable
-(`baseUrl`/`envKey` follow the same defaults as compact-router).
+`thresholdTokens: 300000`, `tailTurns: 6`, model `a8e/a8e-1.0-pro`
+(Kimi K2.6) via the local a8e router at `http://localhost:8080/v1`, using
+the `A8E_API_KEY` environment variable if set (`baseUrl`/`envKey` follow the
+same defaults as compact-router).
 
 ### Interaction with compact-router
 

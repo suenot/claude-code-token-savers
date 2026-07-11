@@ -49,9 +49,9 @@ export const REGISTRY: Record<string, StageDescriptor> = {
         env: {
           PORT: String(port),
           COMPACT_UPSTREAM: upstreamBase as string,
-          COMPACT_MODEL: c.model || 'deepseek/deepseek-v4-flash',
-          COMPACT_BASE_URL: c.baseUrl || 'https://openrouter.ai/api/v1',
-          COMPACT_ENV_KEY: c.envKey || 'OPENROUTER_API_KEY',
+          COMPACT_MODEL: c.model || 'a8e/a8e-1.0-pro',
+          COMPACT_BASE_URL: c.baseUrl || 'http://localhost:8080/v1',
+          COMPACT_ENV_KEY: c.envKey || 'A8E_API_KEY',
         },
       };
     },
@@ -93,9 +93,9 @@ export const REGISTRY: Record<string, StageDescriptor> = {
         env: {
           PORT: String(port),
           WATCHDOG_UPSTREAM: upstreamBase as string,
-          WATCHDOG_MODEL: c.model || 'deepseek/deepseek-v4-flash',
-          WATCHDOG_BASE_URL: c.baseUrl || 'https://openrouter.ai/api/v1',
-          WATCHDOG_ENV_KEY: c.envKey || 'OPENROUTER_API_KEY',
+          WATCHDOG_MODEL: c.model || 'a8e/a8e-1.0-pro',
+          WATCHDOG_BASE_URL: c.baseUrl || 'http://localhost:8080/v1',
+          WATCHDOG_ENV_KEY: c.envKey || 'A8E_API_KEY',
           WATCHDOG_THRESHOLD: String(c.thresholdTokens ?? 300000),
           WATCHDOG_TAIL_TURNS: String(c.tailTurns ?? 6),
         },

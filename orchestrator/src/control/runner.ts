@@ -3,12 +3,15 @@ import type { Store } from './store.ts';
 import type { HarnessAdapter } from './harnesses.ts';
 import { HARNESSES } from './harnesses.ts';
 import type { JobRecord } from './types.ts';
+import { createWorktree, finalizeWorktree } from './worktree.ts';
 
 export function createRunner(opts: {
   store: Store;
   harnesses?: Record<string, HarnessAdapter>;
   spawnImpl?: typeof import('node:child_process').spawn;
   now?: () => number;
+  createWorktreeImpl?: typeof createWorktree;
+  finalizeWorktreeImpl?: typeof finalizeWorktree;
 }): {
   run(job: JobRecord): Promise<void>;
 } {
@@ -16,6 +19,8 @@ export function createRunner(opts: {
   const harnesses = opts.harnesses ?? HARNESSES;
   const spawnImpl = opts.spawnImpl ?? defaultSpawn;
   const now = opts.now ?? (() => Date.now());
+  const createWorktreeImpl = opts.createWorktreeImpl ?? createWorktree;
+  const finalizeWorktreeImpl = opts.finalizeWorktreeImpl ?? finalizeWorktree;
 
   return {
     async run(job: JobRecord): Promise<void> {
@@ -33,14 +38,25 @@ export function createRunner(opts: {
         files: (job as any).files,
       });
 
+      let worktreePath: string | undefined;
+      if (job.isolation === 'worktree') {
+        const { path } = createWorktreeImpl(job.cwd, job.id);
+        worktreePath = path;
+        job = store.update(job.id, { worktreePath: path });
+      }
+
       store.update(job.id, { status: 'running', startedAt: now() });
 
       await new Promise<void>((resolve) => {
         const child: any = spawnImpl(adapter.bin, args, {
-          cwd: job.worktreePath ?? job.cwd,
+          cwd: worktreePath ?? job.cwd,
         } as any);
 
         child.on('close', (code: number | null) => {
+          if (worktreePath) {
+            const { diff, removed } = finalizeWorktreeImpl(job.cwd, worktreePath);
+            store.appendLog(job.id, `\n--- worktree diff (removed=${removed}) ---\n${diff}\n`);
+          }
           store.update(job.id, {
             exitCode: code,
             status: code === 0 ? 'done' : 'failed',

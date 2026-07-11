@@ -129,4 +129,33 @@ describe('control graphify-hook', () => {
     const second = disableClientGraphifyHook(settingsPath);
     expect(second.disabled).toBe(false);
   });
+
+  test('tightened match: unrelated command containing "graphify" as a prefix is NOT matched, real graphify commands are', () => {
+    const original = {
+      hooks: {
+        SessionStart: [
+          {
+            matcher: '',
+            hooks: [
+              { type: 'command', command: '/repos/graphify-utils/other.sh' },
+              { type: 'command', command: 'graphify watch' },
+              { type: 'command', command: '~/.graphify/build-and-watch.sh' },
+            ],
+          },
+        ],
+      },
+    };
+    writeFileSync(settingsPath, JSON.stringify(original, null, 2) + '\n');
+
+    const result = disableClientGraphifyHook(settingsPath);
+    expect(result.disabled).toBe(true);
+
+    const written = JSON.parse(readFileSync(settingsPath, 'utf8'));
+    expect(written.hooks.SessionStart).toEqual([
+      {
+        matcher: '',
+        hooks: [{ type: 'command', command: '/repos/graphify-utils/other.sh' }],
+      },
+    ]);
+  });
 });

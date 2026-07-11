@@ -40,7 +40,7 @@ const apiKey = process.env.OPENROUTER_API_KEY;
 const projectCwd = process.cwd();
 
 const engine = createEngine({ cfg, apiKey, projectCwd });
-const graph = createGraph({ cwd: projectCwd, model: graphCfg.model });
+const graph = createGraph({ cwd: projectCwd, model: graphCfg.model, noMedia: graphCfg.noMedia });
 
 // Two adapters, two processes, one role each — never both in the same
 // process. The supervisor-spawned sidecar (registry sets
@@ -60,6 +60,26 @@ if (httpEnabled) {
   process.stderr.write(
     `[shuba-control] role=http listening on 127.0.0.1:${port} (default harness: ${cfg.default.harness})\n`,
   );
+
+  // Stop the spawned `graphify watch` child process on teardown so orphaned
+  // watchers don't accumulate across sessions.
+  for (const sig of ['SIGINT', 'SIGTERM'] as const) {
+    process.on(sig, () => {
+      try {
+        graph.stopWatch();
+      } catch {
+        // best-effort teardown
+      }
+      process.exit(0);
+    });
+  }
+  process.on('beforeExit', () => {
+    try {
+      graph.stopWatch();
+    } catch {
+      // best-effort teardown
+    }
+  });
 
   // Only the HTTP-role sidecar runs ensure/watch, so a stdio-MCP instance
   // (spawned per Claude Code session via .mcp.json) never starts a second

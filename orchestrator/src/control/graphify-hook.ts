@@ -20,8 +20,11 @@ interface ClaudeSettings {
   [key: string]: unknown;
 }
 
+const GRAPHIFY_WORD = /(^|\s|\/)graphify(\s|$)/;
+
 function isGraphifyCommand(cmd: HookCommand): boolean {
-  return typeof cmd.command === 'string' && cmd.command.includes('graphify');
+  if (typeof cmd.command !== 'string') return false;
+  return cmd.command.includes('build-and-watch.sh') || GRAPHIFY_WORD.test(cmd.command);
 }
 
 /**

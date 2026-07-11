@@ -1,7 +1,31 @@
-import { existsSync, statSync, readFileSync } from 'node:fs';
+import { existsSync, statSync, readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
 import { execFileSync, spawn, type ChildProcess } from 'node:child_process';
+
+/** Max files under cwd before autobuild refuses to run `extract` automatically. */
+export const MAX_AUTOBUILD_FILES = 500;
+
+const SKIP_DIRS = new Set(['.git', 'node_modules', 'graphify-out']);
+
+function countFiles(dir: string): number {
+  let count = 0;
+  let entries: import('node:fs').Dirent[];
+  try {
+    entries = readdirSync(dir, { withFileTypes: true });
+  } catch {
+    return count;
+  }
+  for (const entry of entries) {
+    if (entry.isDirectory()) {
+      if (SKIP_DIRS.has(entry.name)) continue;
+      count += countFiles(join(dir, entry.name));
+    } else {
+      count += 1;
+    }
+  }
+  return count;
+}
 
 export type GraphStatus = {
   built: boolean;
@@ -36,9 +60,11 @@ type SpawnImpl = (
 export function createGraph(opts: {
   cwd: string;
   model?: string;
+  noMedia?: boolean;
   execFileImpl?: ExecFileImpl;
   spawnImpl?: SpawnImpl;
   watchImpl?: unknown;
+  countFilesImpl?: (dir: string) => number;
   now?: () => number;
 }): {
   status(): GraphStatus;
@@ -60,6 +86,8 @@ export function createGraph(opts: {
   const spawnImpl: SpawnImpl =
     opts.spawnImpl ??
     ((file, args, spawnOpts) => spawn(file, args, { cwd: spawnOpts.cwd, env: spawnOpts.env }));
+
+  const countFilesImpl: (dir: string) => number = opts.countFilesImpl ?? countFiles;
 
   function status(): GraphStatus {
     const watching = watcher !== null;
@@ -126,6 +154,9 @@ export function createGraph(opts: {
   }
 
   function startWatch(): void {
+    // Single-watcher guard: never spawn a second watcher for the same
+    // instance while one is already tracked as live.
+    if (watcher) return;
     const env = { ...process.env, GRAPHIFY_OPENROUTER_MODEL: model };
     watcher = spawnImpl('graphify', ['watch', cwd], { cwd, env });
   }
@@ -145,7 +176,16 @@ export function createGraph(opts: {
       return { action: 'skipped', reason: 'not initialized — run graphify build' };
     }
 
-    const env = { ...process.env, GRAPHIFY_OPENROUTER_MODEL: model };
+    const fileCount = countFilesImpl(cwd);
+    if (fileCount > MAX_AUTOBUILD_FILES) {
+      return {
+        action: 'skipped',
+        reason: `corpus too large (${fileCount} files > ${MAX_AUTOBUILD_FILES}) — build manually`,
+      };
+    }
+
+    const env: NodeJS.ProcessEnv = { ...process.env, GRAPHIFY_OPENROUTER_MODEL: model };
+    if (opts.noMedia) env.GRAPHIFY_NO_MEDIA = '1';
     execFileImpl('graphify', ['extract', cwd, '--backend', 'openrouter'], { cwd, env });
     try {
       execFileImpl('graphify', ['cluster-only', cwd, '--backend', 'openrouter'], { cwd, env });
@@ -160,7 +200,7 @@ export function createGraph(opts: {
 
   function stopWatch(): void {
     if (!watcher) return;
-    watcher.kill();
+    watcher.kill('SIGTERM');
     watcher = null;
   }
 

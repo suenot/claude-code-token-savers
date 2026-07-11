@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { createGraph } from '../src/control/graph.ts';
+import { createGraph, MAX_AUTOBUILD_FILES } from '../src/control/graph.ts';
 
 function fakeChild() {
   return { kill: () => {}, killed: false } as unknown as import('node:child_process').ChildProcess;
@@ -111,4 +111,89 @@ test('stopWatch: kills the watcher and clears watching', async () => {
 
   // guard: calling again with no watcher must not throw
   graph.stopWatch();
+});
+
+test('single-watcher guard: calling ensure() twice on a graph-present cwd spawns only once', async () => {
+  const cwd = mkdtempSync(join(tmpdir(), 'g-'));
+  mkdirSync(join(cwd, 'graphify-out'));
+  writeFileSync(join(cwd, 'graphify-out', 'graph.json'), JSON.stringify({ nodes: [] }));
+
+  const spawnCalls: Array<{ file: string; args: string[] }> = [];
+  const spawnImpl = (file: string, args: string[]) => {
+    spawnCalls.push({ file, args });
+    return fakeChild();
+  };
+
+  const graph = createGraph({ cwd, spawnImpl });
+
+  const first = await graph.ensure();
+  const second = await graph.ensure();
+
+  assert.deepEqual(first, { action: 'watch' });
+  assert.deepEqual(second, { action: 'watch' });
+  assert.equal(spawnCalls.length, 1);
+  assert.equal(graph.status().watching, true);
+});
+
+test('autobuild size cap: corpus too large → skipped, no exec/spawn calls', async () => {
+  const cwd = mkdtempSync(join(tmpdir(), 'g-'));
+
+  let execCalled = false;
+  let spawnCalled = false;
+  const execFileImpl = () => {
+    execCalled = true;
+    return '';
+  };
+  const spawnImpl = () => {
+    spawnCalled = true;
+    return fakeChild();
+  };
+  const countFilesImpl = () => 600;
+
+  const graph = createGraph({ cwd, execFileImpl, spawnImpl, countFilesImpl });
+  const result = await graph.ensure({ autobuild: true });
+
+  assert.equal(result.action, 'skipped');
+  assert.match(result.reason ?? '', /too large/);
+  assert.match(result.reason ?? '', new RegExp(`600.*${MAX_AUTOBUILD_FILES}`));
+  assert.equal(execCalled, false);
+  assert.equal(spawnCalled, false);
+});
+
+test('autobuild size cap: small corpus → proceeds to build as before', async () => {
+  const cwd = mkdtempSync(join(tmpdir(), 'g-'));
+
+  const execCalls: Array<{ args: string[] }> = [];
+  const execFileImpl = (file: string, args: string[]) => {
+    execCalls.push({ args });
+    return '';
+  };
+  const spawnImpl = () => fakeChild();
+  const countFilesImpl = () => 10;
+
+  const graph = createGraph({ cwd, execFileImpl, spawnImpl, countFilesImpl });
+  const result = await graph.ensure({ autobuild: true });
+
+  assert.deepEqual(result, { action: 'built-then-watch' });
+  assert.equal(execCalls.length, 2);
+  assert.deepEqual(execCalls[0]!.args, ['extract', cwd, '--backend', 'openrouter']);
+});
+
+test('noMedia: GRAPHIFY_NO_MEDIA=1 is passed to the build/extract env when noMedia is true', async () => {
+  const cwd = mkdtempSync(join(tmpdir(), 'g-'));
+
+  const execCalls: Array<{ args: string[]; env: NodeJS.ProcessEnv }> = [];
+  const execFileImpl = (file: string, args: string[], execOpts: { env: NodeJS.ProcessEnv }) => {
+    execCalls.push({ args, env: execOpts.env });
+    return '';
+  };
+  const spawnImpl = () => fakeChild();
+
+  const graph = createGraph({ cwd, execFileImpl, spawnImpl, noMedia: true });
+  const result = await graph.ensure({ autobuild: true });
+
+  assert.deepEqual(result, { action: 'built-then-watch' });
+  assert.equal(execCalls.length, 2);
+  assert.equal(execCalls[0]!.env.GRAPHIFY_NO_MEDIA, '1');
+  assert.equal(execCalls[1]!.env.GRAPHIFY_NO_MEDIA, '1');
 });

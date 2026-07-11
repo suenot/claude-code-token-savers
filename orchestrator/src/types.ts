@@ -21,6 +21,16 @@ export type StageDescriptor = {
   build(ctx: BuildContext): BuildResult;
 };
 
+export type DelegateConfig = {
+  concurrency?: number;
+  isolation?: 'none' | 'worktree';
+  default: { harness: string; model: string };
+  policy?: Array<{ when: string; harness: string; model: string }>;
+  baseUrl?: string;
+  classifierModel?: string;
+  envKey?: string;
+};
+
 export type Config = {
   terminal: string;
   compressors: string[];
@@ -31,6 +41,8 @@ export type Config = {
     thresholdTokens?: number; tailTurns?: number;
   };
   rateLimiter?: { rps?: number; burst?: number; cooldownMs?: number };
+  delegate?: DelegateConfig;
+  control?: { enabled?: boolean };
 };
 
 export type PlannedStage = {
@@ -44,7 +56,7 @@ export type PlannedStage = {
 };
 
 export type PlanResult =
-  | { ok: true; chain: PlannedStage[]; head: { baseUrl: string; requiresToken: boolean } }
+  | { ok: true; chain: PlannedStage[]; sidecars: PlannedStage[]; head: { baseUrl: string; requiresToken: boolean } }
   | { ok: false; errors: string[] };
 
 export type ChainHandle = {

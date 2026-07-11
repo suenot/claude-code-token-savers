@@ -53,10 +53,12 @@ export async function up(
     spawnImpl = spawn as unknown as SpawnLike,
     fetchImpl = fetch as FetchLike,
     healthOpts = {},
+    sidecars = [],
   }: {
     spawnImpl?: SpawnLike;
     fetchImpl?: FetchLike;
     healthOpts?: Record<string, unknown>;
+    sidecars?: PlannedStage[];
   } = {},
 ): Promise<ChainHandle> {
   const started: Array<{ id: string; port: number; child: SpawnedProcess }> = [];
@@ -70,7 +72,9 @@ export async function up(
     }
   };
   try {
-    for (const stage of chain) {
+    // Sidecars run alongside the chain (e.g. `control`) — spawned and
+    // health-waited the same way, but they don't forward chain traffic.
+    for (const stage of [...sidecars, ...chain]) {
       const child = spawnImpl(stage.spawn.bin, stage.spawn.args, {
         env: { ...process.env, ...stage.spawn.env },
         stdio: ['ignore', 'inherit', 'inherit'],

@@ -46,7 +46,7 @@ async function doRun(argv: string[]): Promise<number> {
     console.error('shuba: invalid chain:\n  - ' + result.errors.join('\n  - '));
     return 1;
   }
-  const handle: ChainHandle = await up(result.chain);
+  const handle: ChainHandle = await up(result.chain, { sidecars: result.sidecars });
   try {
     let apiKey;
     if (result.head.requiresToken) {
@@ -84,7 +84,7 @@ async function doUp(): Promise<number> {
     console.error('shuba: invalid chain:\n  - ' + result.errors.join('\n  - '));
     return 1;
   }
-  const handle: ChainHandle = await up(result.chain);
+  const handle: ChainHandle = await up(result.chain, { sidecars: result.sidecars });
   console.error('shuba: chain up:', JSON.stringify(handle.status()));
   console.error('shuba: Ctrl-C to tear down.');
   for (const sig of ['SIGINT', 'SIGTERM'] as const) {

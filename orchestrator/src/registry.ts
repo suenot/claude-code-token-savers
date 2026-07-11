@@ -4,6 +4,7 @@ import type { StageDescriptor, BuildContext, BuildResult } from './types.ts';
 const COMPACT_BIN = fileURLToPath(new URL('../bin/compact-interceptor.ts', import.meta.url));
 const WATCHDOG_BIN = fileURLToPath(new URL('../bin/context-watchdog.ts', import.meta.url));
 const RATELIMIT_BIN = fileURLToPath(new URL('../bin/rate-limiter.ts', import.meta.url));
+const CONTROL_BIN = fileURLToPath(new URL('../bin/shuba-control.ts', import.meta.url));
 
 export const REGISTRY: Record<string, StageDescriptor> = {
   pxpipe: {
@@ -109,6 +110,26 @@ export const REGISTRY: Record<string, StageDescriptor> = {
           WATCHDOG_ENV_KEY: c.envKey || 'OPENROUTER_API_KEY',
           WATCHDOG_THRESHOLD: String(c.thresholdTokens ?? 300000),
           WATCHDOG_TAIL_TURNS: String(c.tailTurns ?? 6),
+        },
+      };
+    },
+  },
+  control: {
+    id: 'control',
+    builtin: true,
+    bin: process.execPath,
+    defaultPort: 47830,
+    dialect: 'anthropic',
+    terminal: false,
+    healthPath: '/health',
+    build({ port, config }: BuildContext): BuildResult {
+      const delegate = config?.delegate ?? { default: { harness: 'opencode', model: 'deepseek/deepseek-v4-flash' } };
+      return {
+        args: [CONTROL_BIN],
+        env: {
+          PORT: String(port),
+          DELEGATE_JSON: JSON.stringify(delegate),
+          OPENROUTER_API_KEY: process.env.OPENROUTER_API_KEY ?? '',
         },
       };
     },

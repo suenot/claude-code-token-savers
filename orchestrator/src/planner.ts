@@ -83,5 +83,23 @@ export function plan(config: Config, registry: Record<string, StageDescriptor> =
   });
 
   const requiresToken = chain.some((s) => registry[s.id].requiresToken);
-  return { ok: true, chain, head: { baseUrl: chain[0].baseUrl, requiresToken } };
+
+  // Sidecars run alongside the proxy chain but are not part of it — they don't
+  // forward/receive chain traffic. `control` is enabled by default.
+  const sidecars: PlannedStage[] = [];
+  if (config.control?.enabled !== false && registry.control) {
+    const d = registry.control;
+    const sidecarPorts = ports;
+    const port = sidecarPorts[d.id] ?? d.defaultPort;
+    const { args, env } = d.build({ port, config });
+    sidecars.push({
+      id: d.id,
+      port,
+      baseUrl: baseUrlFor(d, port),
+      healthUrl: `http://127.0.0.1:${port}${d.healthPath}`,
+      spawn: { bin: d.bin, args, env },
+    });
+  }
+
+  return { ok: true, chain, sidecars, head: { baseUrl: chain[0].baseUrl, requiresToken } };
 }

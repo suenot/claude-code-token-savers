@@ -64,3 +64,40 @@ test('up tears down already-started stages in reverse order on health failure, a
   );
   assert.deepEqual(killed, ['s2', 's1']);
 });
+
+test('up() starts sidecars alongside the chain and health-checks them', async () => {
+  const startedOrder: string[] = [];
+  const makeChild = (id: string) => ({ pid: id, kill: () => {} });
+  const children: Record<string, ReturnType<typeof makeChild>> = {
+    control: makeChild('control'),
+    s1: makeChild('s1'),
+  };
+  const spawnImpl = (bin: string) => {
+    startedOrder.push(bin);
+    return children[bin];
+  };
+  const fetchImpl = async () => ({ ok: true });
+  const chain: PlannedStage[] = [
+    {
+      id: 's1',
+      port: 1,
+      baseUrl: 'http://x',
+      healthUrl: 'http://x/1',
+      spawn: { bin: 's1', args: [], env: {} },
+    },
+  ];
+  const sidecars: PlannedStage[] = [
+    {
+      id: 'control',
+      port: 47830,
+      baseUrl: 'http://x',
+      healthUrl: 'http://x/health',
+      spawn: { bin: 'control', args: [], env: {} },
+    },
+  ];
+  const handle = await up(chain, { spawnImpl, fetchImpl, sidecars, healthOpts: { timeoutMs: 20, intervalMs: 1 } });
+  assert.deepEqual(startedOrder, ['control', 's1']);
+  const status = handle.status();
+  assert.ok(status.some((s) => s.id === 'control'));
+  await handle.down();
+});

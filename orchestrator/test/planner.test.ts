@@ -77,3 +77,18 @@ test('REJECT port collision', () => {
   assert.equal(r.ok, false);
   assert.match(r.errors.join('\n'), /8080|port/i);
 });
+
+test('sidecars include control by default and it is not part of the chain', () => {
+  const r = plan({ terminal: 'anthropic', compressors: ['headroom'] });
+  assert.equal(r.ok, true);
+  if (!r.ok) return;
+  assert.deepEqual(r.chain.map((s) => s.id), ['headroom']);
+  assert.ok(r.sidecars.some((s) => s.id === 'control'));
+});
+
+test('sidecars is empty when config.control.enabled is false', () => {
+  const r = plan({ terminal: 'anthropic', compressors: ['headroom'], control: { enabled: false } });
+  assert.equal(r.ok, true);
+  if (!r.ok) return;
+  assert.deepEqual(r.sidecars, []);
+});

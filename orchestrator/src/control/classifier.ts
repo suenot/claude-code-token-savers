@@ -1,5 +1,8 @@
 import type { DelegateInput } from './types.ts';
 import { HARNESSES } from './harnesses.ts';
+import type { DelegateConfig } from '../types.ts';
+
+export type { DelegateConfig } from '../types.ts';
 
 // Loosened to the subset actually used (`.ok` / `.json()`), so test doubles
 // that return a plain object don't typecheck against the full global `fetch`
@@ -8,16 +11,6 @@ type FetchLike = (
   url: string,
   init?: Record<string, unknown>
 ) => Promise<{ ok?: boolean; json?: () => Promise<any> }>;
-
-export type DelegateConfig = {
-  concurrency?: number;
-  isolation?: 'none' | 'worktree';
-  default: { harness: string; model: string };
-  policy?: Array<{ when: string; harness: string; model: string }>;
-  baseUrl?: string;
-  classifierModel?: string;
-  envKey?: string;
-};
 
 type ClassifierResult = { harness: string; model: string } | null;
 

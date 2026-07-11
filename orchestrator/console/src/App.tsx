@@ -1,8 +1,9 @@
 import { useState } from 'react';
 import { ChainView } from './views/ChainView.tsx';
 import { HarnessView } from './views/HarnessView.tsx';
+import { JobsView } from './views/JobsView.tsx';
 
-const TABS = ['Chain', 'Harnesses'] as const;
+const TABS = ['Chain', 'Harnesses', 'Jobs'] as const;
 type Tab = (typeof TABS)[number];
 
 function renderTab(tab: Tab) {
@@ -11,6 +12,8 @@ function renderTab(tab: Tab) {
       return <ChainView />;
     case 'Harnesses':
       return <HarnessView />;
+    case 'Jobs':
+      return <JobsView />;
     default:
       return null;
   }

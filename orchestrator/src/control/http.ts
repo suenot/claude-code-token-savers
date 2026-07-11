@@ -23,6 +23,7 @@ type Collector = {
   chain(): Promise<unknown>;
   stats(): Promise<unknown>;
   recentRequests(limit?: number): Promise<unknown>;
+  hopLog(limit?: number): Promise<unknown>;
 };
 
 const SECRET_KEY_RE = /api[_-]?key|secret|token|password|passphrase|credential|bearer|private[_-]?key/i;

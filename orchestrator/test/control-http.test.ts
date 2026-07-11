@@ -205,6 +205,10 @@ function stubCollector() {
       this.calls.push(`recentRequests:${limit ?? ''}`);
       return [{ id: 1 }];
     },
+    async hopLog(limit?: number) {
+      this.calls.push(`hopLog:${limit ?? ''}`);
+      return [{ id: 2, stage: 'rate-limiter' }];
+    },
   };
 }
 
@@ -242,7 +246,7 @@ test('GET /api/stats returns the collector stats output', async () => {
   }
 });
 
-test('GET /api/requests returns the collector recentRequests output', async () => {
+test('GET /api/requests returns the collector merged hopLog output', async () => {
   const engine = stubEngine();
   const collector = stubCollector();
   const server = createControlHttp(engine as any, { collector: collector as any });
@@ -252,8 +256,8 @@ test('GET /api/requests returns the collector recentRequests output', async () =
   try {
     const res = await fetch(`http://127.0.0.1:${port}/api/requests?limit=5`);
     assert.equal(res.status, 200);
-    assert.deepEqual(await res.json(), [{ id: 1 }]);
-    assert.deepEqual(collector.calls, ['recentRequests:5']);
+    assert.deepEqual(await res.json(), [{ id: 2, stage: 'rate-limiter' }]);
+    assert.deepEqual(collector.calls, ['hopLog:5']);
   } finally {
     server.close();
   }

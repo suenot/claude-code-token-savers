@@ -86,6 +86,12 @@ export function graphQuery(query: string): Promise<GraphQueryResult> {
   return postJson<GraphQueryResult>('/api/graph/query', { query });
 }
 
+// getConfig fetches the running orchestrator config with secret-ish fields
+// (matching /apikey|secret|token/i) already stripped server-side.
+export function getConfig(): Promise<Record<string, unknown>> {
+  return getJson<Record<string, unknown>>('/api/config');
+}
+
 // openLogStream opens a WebSocket against /api/stream/logs/:id and invokes
 // onChunk for every text frame received. Returns a close function. Relies on
 // browser globals (WebSocket, location) that are absent under `bun test` —

@@ -22,6 +22,27 @@ type Collector = {
   stats(): Promise<unknown>;
 };
 
+const SECRET_KEY_RE = /apikey|secret|token/i;
+
+// redactSecrets recursively walks a value and drops any object key whose
+// name matches SECRET_KEY_RE (case-insensitive). Used to strip credentials
+// out of the loaded config before serving it over GET /api/config. Arrays
+// are walked element-wise; primitives pass through unchanged.
+export function redactSecrets(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map((item) => redactSecrets(item));
+  }
+  if (value !== null && typeof value === 'object') {
+    const out: Record<string, unknown> = {};
+    for (const [key, val] of Object.entries(value as Record<string, unknown>)) {
+      if (SECRET_KEY_RE.test(key)) continue;
+      out[key] = redactSecrets(val);
+    }
+    return out;
+  }
+  return value;
+}
+
 const CONTENT_TYPES: Record<string, string> = {
   '.html': 'text/html; charset=utf-8',
   '.js': 'text/javascript; charset=utf-8',
@@ -85,11 +106,12 @@ async function readBody(req: IncomingMessage): Promise<string> {
 
 export function createControlHttp(
   engine: Engine,
-  opts?: { staticDir?: string; graph?: Graph; collector?: Collector },
+  opts?: { staticDir?: string; graph?: Graph; collector?: Collector; config?: unknown },
 ): Server {
   const staticDir = opts?.staticDir;
   const graph = opts?.graph;
   const collector = opts?.collector;
+  const config = opts?.config;
 
   const server = createServer((req, res) => {
     void handleRequest(req, res).catch((err) => {
@@ -225,6 +247,11 @@ export function createControlHttp(
         return;
       }
       sendJson(res, 200, await collector.stats());
+      return;
+    }
+
+    if (method === 'GET' && pathname === '/api/config') {
+      sendJson(res, 200, redactSecrets(config ?? {}));
       return;
     }
 

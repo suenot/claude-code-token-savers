@@ -249,6 +249,53 @@ test('GET /api/stats returns 404 when no collector is configured', async () => {
   });
 });
 
+test('GET /api/config returns the loaded config with secret fields stripped', async () => {
+  const engine = stubEngine();
+  const config = {
+    delegate: { defaultHarness: 'opencode', timeoutMs: 5000 },
+    someApiKey: 'SECRET',
+    anthropic: { apiKey: 'sk-secret', model: 'sonnet' },
+    auth: { token: 'tok-secret', secretValue: 'also-secret' },
+  };
+  const server = createControlHttp(engine as any, { config: config as any });
+  await new Promise<void>((resolve) => server.listen(0, resolve));
+  const addr = server.address();
+  const port = typeof addr === 'object' && addr ? addr.port : 0;
+  try {
+    const res = await fetch(`http://127.0.0.1:${port}/api/config`);
+    assert.equal(res.status, 200);
+    assert.deepEqual(await res.json(), {
+      delegate: { defaultHarness: 'opencode', timeoutMs: 5000 },
+      anthropic: { model: 'sonnet' },
+      auth: {},
+    });
+  } finally {
+    server.close();
+  }
+});
+
+test('GET /api/config returns {} when no config is configured', async () => {
+  await withServer(async (base) => {
+    const res = await fetch(`${base}/api/config`);
+    assert.equal(res.status, 200);
+    assert.deepEqual(await res.json(), {});
+  });
+});
+
+test('GET /api/config with a cross-origin Origin header returns 403 (Origin guard applies)', async () => {
+  const engine = stubEngine();
+  const server = createControlHttp(engine as any, { config: { foo: 'bar' } as any });
+  await new Promise<void>((resolve) => server.listen(0, resolve));
+  const addr = server.address();
+  const port = typeof addr === 'object' && addr ? addr.port : 0;
+  try {
+    const res = await fetch(`http://127.0.0.1:${port}/api/config`, { headers: { origin: 'http://evil.com' } });
+    assert.equal(res.status, 403);
+  } finally {
+    server.close();
+  }
+});
+
 test('isLoopbackHost accepts loopback hosts and rejects everything else', () => {
   assert.equal(isLoopbackHost('127.0.0.1:47830'), true);
   assert.equal(isLoopbackHost('localhost'), true);

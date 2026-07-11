@@ -1,4 +1,4 @@
-function flatten(content) {
+function flatten(content: any): string {
   if (typeof content === 'string') return content;
   if (!Array.isArray(content)) return '';
   return content.map((b) => {
@@ -14,8 +14,8 @@ function flatten(content) {
   }).join('');
 }
 
-export function anthropicToOpenAI(body, model) {
-  const messages = [];
+export function anthropicToOpenAI(body: any, model: string): any {
+  const messages: any[] = [];
   if (body.system) messages.push({ role: 'system', content: flatten(body.system) });
   for (const m of body.messages || []) {
     messages.push({ role: m.role, content: flatten(m.content) });
@@ -29,11 +29,14 @@ export function anthropicToOpenAI(body, model) {
   };
 }
 
-export function mapStopReason(finishReason) {
+export function mapStopReason(finishReason: string | null | undefined): string {
   return finishReason === 'length' ? 'max_tokens' : 'end_turn';
 }
 
-export function openAIMessageToAnthropic(text, { model, inputTokens = 0, outputTokens = 0, stopReason = 'end_turn' }) {
+export function openAIMessageToAnthropic(
+  text: string,
+  { model, inputTokens = 0, outputTokens = 0, stopReason = 'end_turn' }: { model: string; inputTokens?: number; outputTokens?: number; stopReason?: string },
+): any {
   return {
     id: 'msg_compact',
     type: 'message',
@@ -46,11 +49,14 @@ export function openAIMessageToAnthropic(text, { model, inputTokens = 0, outputT
   };
 }
 
-function frame(type, obj) {
+function frame(type: string, obj: any): string {
   return `event: ${type}\ndata: ${JSON.stringify({ type, ...obj })}\n\n`;
 }
 
-export function anthropicSSEChunks(text, { model, inputTokens = 0, outputTokens = 0, stopReason = 'end_turn' }) {
+export function anthropicSSEChunks(
+  text: string,
+  { model, inputTokens = 0, outputTokens = 0, stopReason = 'end_turn' }: { model: string; inputTokens?: number; outputTokens?: number; stopReason?: string },
+): string[] {
   return [
     frame('message_start', { message: { id: 'msg_compact', type: 'message', role: 'assistant', model, content: [], stop_reason: null, stop_sequence: null, usage: { input_tokens: inputTokens, output_tokens: 0 } } }),
     frame('content_block_start', { index: 0, content_block: { type: 'text', text: '' } }),

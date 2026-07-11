@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { anthropicToOpenAI, openAIMessageToAnthropic, anthropicSSEChunks } from '../src/compact/translate.js';
+import { anthropicToOpenAI, openAIMessageToAnthropic, anthropicSSEChunks } from '../src/compact/translate.ts';
 
 test('anthropicToOpenAI: string system + string message', () => {
   const r = anthropicToOpenAI(
@@ -46,7 +46,7 @@ test('openAIMessageToAnthropic: correct message shape', () => {
 
 test('anthropicSSEChunks: ordered frames carrying the text', () => {
   const frames = anthropicSSEChunks('hello', { model: 'm' });
-  const types = frames.map((f) => f.match(/^event: (\S+)/)[1]);
+  const types = frames.map((f) => f.match(/^event: (\S+)/)![1]);
   assert.deepEqual(types, [
     'message_start', 'content_block_start', 'content_block_delta',
     'content_block_stop', 'message_delta', 'message_stop',

@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { isCompactRequest } from '../src/compact/matcher.js';
+import { isCompactRequest } from '../src/compact/matcher.ts';
 
 const compactUser =
   'CRITICAL: Respond with TEXT ONLY. Do NOT call any tools.\n\n' +

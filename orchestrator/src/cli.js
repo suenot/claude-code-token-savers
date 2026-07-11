@@ -28,7 +28,11 @@ export function splitClaudeArgs(argv) {
   // also passed it. This lets `shuba run --resume`, `shuba run -- --resume`, etc.
   let rest = argv.slice(1); // drop the `run` command itself
   if (rest[0] === '--') rest = rest.slice(1);
-  const args = ['--dangerously-skip-permissions', ...rest];
+  // On by default (power-user auto mode), but opt out with SHUBA_SKIP_PERMISSIONS=0
+  // — it makes claude run every tool call without a permission prompt, so only
+  // keep it on for sessions whose work you trust.
+  const skip = process.env.SHUBA_SKIP_PERMISSIONS !== '0';
+  const args = skip ? ['--dangerously-skip-permissions', ...rest] : [...rest];
   return args.filter((a, i) => args.indexOf(a) === i);
 }
 

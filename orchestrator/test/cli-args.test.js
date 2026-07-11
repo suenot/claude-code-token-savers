@@ -17,3 +17,14 @@ test('drops a leading -- separator', () => {
 test('does not duplicate --dangerously-skip-permissions if the user passes it', () => {
   assert.deepEqual(splitClaudeArgs(['run', '--dangerously-skip-permissions']), ['--dangerously-skip-permissions']);
 });
+
+test('SHUBA_SKIP_PERMISSIONS=0 opts out of the injected flag', () => {
+  const prev = process.env.SHUBA_SKIP_PERMISSIONS;
+  process.env.SHUBA_SKIP_PERMISSIONS = '0';
+  try {
+    assert.deepEqual(splitClaudeArgs(['run', '--resume']), ['--resume']);
+  } finally {
+    if (prev === undefined) delete process.env.SHUBA_SKIP_PERMISSIONS;
+    else process.env.SHUBA_SKIP_PERMISSIONS = prev;
+  }
+});

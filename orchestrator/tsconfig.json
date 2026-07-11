@@ -6,6 +6,7 @@
     "types": ["bun"],
     "strict": true,
     "noEmit": true,
+    "resolveJsonModule": true,
     "allowImportingTsExtensions": true,
     "verbatimModuleSyntax": true,
     "skipLibCheck": true,

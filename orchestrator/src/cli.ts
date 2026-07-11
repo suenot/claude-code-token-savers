@@ -1,5 +1,3 @@
-import { readFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
 import { execSync } from 'node:child_process';
 import { loadConfig } from './config.ts';
 import { plan } from './planner.ts';
@@ -8,6 +6,7 @@ import { mintToken } from './router-bootstrap.ts';
 import { runClaude } from './launcher.ts';
 import { REGISTRY } from './registry.ts';
 import type { PlanResult, PlannedStage, ChainHandle } from './types.ts';
+import pkg from '../package.json' with { type: 'json' };
 
 const INSTALL_HINT: Record<string, string> = {
   pxpipe: 'npm i -g pxpipe-proxy',
@@ -16,9 +15,6 @@ const INSTALL_HINT: Record<string, string> = {
 };
 
 function version(): string {
-  const pkg = JSON.parse(
-    readFileSync(fileURLToPath(new URL('../package.json', import.meta.url)), 'utf8'),
-  );
   return pkg.version;
 }
 

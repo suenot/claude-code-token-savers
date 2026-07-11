@@ -1,8 +1,8 @@
 # shuba
 
-**shuba** (шуба — Russian for "fur coat") is a thin Node CLI that chains Claude
-Code's token-saving proxies so they layer on top of each other instead of
-fighting for the same slot.
+**shuba** (шуба — Russian for "fur coat") is a thin Bun/TypeScript CLI that
+chains Claude Code's token-saving proxies so they layer on top of each other
+instead of fighting for the same slot.
 
 ## Why
 
@@ -49,9 +49,19 @@ the request path and it doesn't compose with other proxies. shuba's job is
 specifically to chain several *proxies* (things that sit in the request path)
 so they don't collide.
 
-## Install
+## Requirements
 
-Requires **Node ≥18**.
+shuba runs on **[Bun](https://bun.sh) ≥1.1** — there is no Node runtime
+dependency for the CLI itself.
+
+- **Dev / from source**: `bun bin/shuba.ts <command>` runs the CLI directly
+  from TypeScript, no build step needed.
+- **Standalone binary**: `bun run build` compiles a single-file executable to
+  `./shuba` (via `bun build --compile`); run it with `./shuba <command>`.
+- **Tests**: `bun test` (see [Commands](#commands) below for the CLI's own
+  commands).
+
+## Install
 
 ```bash
 npm i -g ./orchestrator
@@ -59,8 +69,9 @@ npm i -g ./orchestrator
 cd orchestrator && npm link
 ```
 
-This installs the `shuba` command. The three proxies shuba wraps are
-installed separately — shuba does not vendor or auto-install them:
+This installs the `shuba` command (still distributed as an npm package, but
+executed by Bun). The three proxies shuba wraps are installed separately —
+shuba does not vendor or auto-install them:
 
 ```bash
 npm i -g pxpipe-proxy                    # pxpipe
@@ -109,8 +120,8 @@ set to match.
 
 ## compact-router
 
-**compact-router** is a built-in shuba stage — it spawns our own Node module
-(`orchestrator/bin/compact-interceptor.js`) instead of an external binary, but
+**compact-router** is a built-in shuba stage — it spawns our own Bun module
+(`orchestrator/bin/compact-interceptor.ts`) instead of an external binary, but
 otherwise flows through the same supervisor/planner as any other compressor.
 
 ### What it does
@@ -176,7 +187,7 @@ the same `baseUrl`/`envKey` works).
 ## context-watchdog
 
 **context-watchdog** is a built-in shuba stage — like compact-router it
-spawns our own Node module (`orchestrator/bin/context-watchdog.js`) instead
+spawns our own Bun module (`orchestrator/bin/context-watchdog.ts`) instead
 of an external binary, and flows through the same supervisor/planner as any
 other compressor.
 

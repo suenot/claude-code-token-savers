@@ -1,4 +1,5 @@
 import { execSync } from 'node:child_process';
+import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { loadConfig } from './config.ts';
@@ -8,6 +9,7 @@ import { mintToken } from './router-bootstrap.ts';
 import { runClaude } from './launcher.ts';
 import { REGISTRY } from './registry.ts';
 import { registerMcp, unregisterMcp } from './control/mcp-register.ts';
+import { disableClientGraphifyHook } from './control/graphify-hook.ts';
 import { detectHarnesses } from './control/harnesses.ts';
 import type { PlanResult, PlannedStage, ChainHandle } from './types.ts';
 import pkg from '../package.json' with { type: 'json' };
@@ -19,6 +21,13 @@ const CONTROL_BIN = fileURLToPath(new URL('../bin/shuba-control.ts', import.meta
 // picked up with zero user configuration.
 function mcpConfigPath(): string {
   return join(process.cwd(), '.mcp.json');
+}
+
+// Claude Code user settings.json, where the client-side graphify SessionStart
+// hook (if installed) lives. Factored out as a helper so tests can inject a
+// temp path.
+function claudeSettingsPath(): string {
+  return join(homedir(), '.claude', 'settings.json');
 }
 
 const INSTALL_HINT: Record<string, string> = {
@@ -65,6 +74,14 @@ async function doRun(argv: string[]): Promise<number> {
   } catch (err) {
     console.error('shuba: warning: failed to register shuba-control MCP server:', (err as Error).message);
   }
+  let restoreGraphifyHook = (): void => {};
+  if (config.graph?.enabled !== false) {
+    try {
+      restoreGraphifyHook = disableClientGraphifyHook(claudeSettingsPath()).restore;
+    } catch (err) {
+      console.error('shuba: warning: failed to disable client graphify hook:', (err as Error).message);
+    }
+  }
   try {
     let apiKey;
     if (result.head.requiresToken) {
@@ -81,6 +98,11 @@ async function doRun(argv: string[]): Promise<number> {
           unregisterMcp(mcpConfigPath());
         } catch (err) {
           console.error('shuba: warning: failed to unregister shuba-control MCP server:', (err as Error).message);
+        }
+        try {
+          restoreGraphifyHook();
+        } catch (err) {
+          console.error('shuba: warning: failed to restore client graphify hook:', (err as Error).message);
         }
         await handle.down();
         resolve(code ?? 0);
@@ -99,6 +121,11 @@ async function doRun(argv: string[]): Promise<number> {
       unregisterMcp(mcpConfigPath());
     } catch (unregErr) {
       console.error('shuba: warning: failed to unregister shuba-control MCP server:', (unregErr as Error).message);
+    }
+    try {
+      restoreGraphifyHook();
+    } catch (restoreErr) {
+      console.error('shuba: warning: failed to restore client graphify hook:', (restoreErr as Error).message);
     }
     await handle.down();
     throw err;

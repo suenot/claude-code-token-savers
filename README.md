@@ -49,7 +49,7 @@ Tools: **shuba** (Bun/TS) · [cmdop-claude](https://github.com/markolofsen/cmdop
 | Rate limiting | ✓ | · | · | · | ✓ | · | · |
 | Chain proxies behind one `BASE_URL` | ✓ | · | · | · | · | · | · |
 | Provider / model routing | ~ | · | · | ✓ | ✓ | · | · |
-| Cheap-model offload | ✓ | ✓ | ✓ | ✓ | ✓ | · | · |
+| Cheap model for the tool's own work (off Claude's budget) | ✓ | ✓ | ✓ | ~ | ~ | · | · |
 
 **Project intelligence / sidecar** — cmdop-claude's core idea: spend cents on a cheap model to keep docs/maps accurate so Claude Code's scarce context isn't spent on it:
 
@@ -68,9 +68,12 @@ Tools: **shuba** (Bun/TS) · [cmdop-claude](https://github.com/markolofsen/cmdop
 
 | feature | shuba | cmdop | graphify | ccr | litellm | headroom | pxpipe |
 |---|:-:|:-:|:-:|:-:|:-:|:-:|:-:|
-| Delegate a task to a sub-harness via MCP (`shuba_delegate`) | ✓ | · | · | · | · | · | · |
+| Trigger a cheap-model job from Claude via MCP | ✓ | ~ | · | · | · | · | · |
+| Delegate an **arbitrary** task to a sub-harness (`shuba_delegate`) | ✓ | · | · | · | · | · | · |
 | LLM-based model/harness routing (cheap classifier picks target) | ✓ | · | · | · | · | · | · |
 | Per-job git-worktree isolation | ✓ | · | · | · | · | · | · |
+
+cmdop's `~` is the key nuance: it *does* expose a cheap-model job to Claude over MCP — but only the fixed docs-review scan (`sidecar_scan`), not arbitrary task delegation. shuba's `shuba_delegate` hands off any task. Every other tool's cheap-model use is internal (invisible to Claude), which is why the old single "cheap-model offload" row was misleading and is now split three ways: internal use, MCP-triggered fixed job, and MCP arbitrary delegation.
 
 **Ops / visibility:**
 

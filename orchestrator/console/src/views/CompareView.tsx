@@ -70,9 +70,9 @@ const SECTIONS: Section[] = [
         cells: { shuba: 'partial', ccr: 'yes', litellm: 'yes' },
       },
       {
-        feature: 'Cheap-model offload',
-        hint: 'send some work to a cheaper model',
-        cells: { shuba: 'yes', cmdop: 'yes', graphify: 'yes', ccr: 'yes', litellm: 'yes' },
+        feature: "Cheap model for the tool's own work (off Claude's budget)",
+        hint: 'internal use — compact-router / classifier / watchdog summaries (shuba), docs review (cmdop), graph extraction (graphify)',
+        cells: { shuba: 'yes', cmdop: 'yes', graphify: 'yes', ccr: 'partial', litellm: 'partial' },
       },
     ],
   },
@@ -125,8 +125,13 @@ const SECTIONS: Section[] = [
     title: 'Task delegation / routing (offload whole tasks off Claude Code)',
     rows: [
       {
-        feature: 'Delegate a task to a sub-harness via MCP',
-        hint: 'shuba_delegate: Claude Code hands a task to opencode/gemini/qwen/cursor-agent/claude',
+        feature: 'Trigger a cheap-model job from Claude via MCP',
+        hint: 'shuba: any task (shuba_delegate); cmdop: only the fixed docs-review scan (sidecar_scan)',
+        cells: { shuba: 'yes', cmdop: 'partial' },
+      },
+      {
+        feature: 'Delegate an ARBITRARY task to a sub-harness',
+        hint: 'shuba_delegate hands any task to opencode/gemini/qwen/cursor-agent/claude — not a fixed job',
         cells: { shuba: 'yes' },
       },
       {

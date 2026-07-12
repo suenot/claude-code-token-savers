@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import type { DelegateInput } from './types.ts';
+import type { TaskManager } from './tasks.ts';
 
 export type Engine = {
   delegate(input: DelegateInput): Promise<unknown>;
@@ -28,7 +29,7 @@ function textResult(value: unknown): { content: Array<{ type: 'text'; text: stri
   return { content: [{ type: 'text', text: JSON.stringify(value) }] };
 }
 
-export function createMcpServer(engine: Engine, graph?: Graph): McpServer {
+export function createMcpServer(engine: Engine, graph?: Graph, tasks?: TaskManager): McpServer {
   const server = new McpServer({ name: 'shuba-control', version: '0.1.0' });
 
   server.registerTool(
@@ -84,6 +85,42 @@ export function createMcpServer(engine: Engine, graph?: Graph): McpServer {
         inputSchema: {},
       },
       async () => textResult(graph.status()),
+    );
+  }
+
+  if (tasks) {
+    server.registerTool(
+      'shuba_tasks_list',
+      {
+        description: 'List shuba tasks, optionally filtered by status (pending, completed, dismissed).',
+        inputSchema: { status: z.enum(['pending', 'completed', 'dismissed']).optional() },
+      },
+      async ({ status }) => textResult(tasks.listTasks(status)),
+    );
+
+    server.registerTool(
+      'shuba_tasks_create',
+      {
+        description: 'Create a new shuba task.',
+        inputSchema: {
+          priority: z.enum(['critical', 'high', 'medium', 'low']),
+          title: z.string(),
+          description: z.string(),
+          context_files: z.array(z.string()).optional(),
+          source: z.string().optional(),
+        },
+      },
+      async ({ priority, title, description, context_files, source }) =>
+        textResult(tasks.createTask({ priority, title, description, contextFiles: context_files, source })),
+    );
+
+    server.registerTool(
+      'shuba_tasks_update',
+      {
+        description: 'Update a shuba task status (pending, completed, dismissed).',
+        inputSchema: { id: z.string(), status: z.enum(['pending', 'completed', 'dismissed']) },
+      },
+      async ({ id, status }) => textResult({ updated: tasks.updateStatus(id, status) }),
     );
   }
 

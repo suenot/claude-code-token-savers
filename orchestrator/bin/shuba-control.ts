@@ -5,6 +5,8 @@ import { createControlHttp } from '../src/control/http.ts';
 import { createCollector, type ChainStage } from '../src/control/collector.ts';
 import { createMcpServer, connectStdio } from '../src/control/mcp.ts';
 import { createGraph } from '../src/control/graph.ts';
+import { createTaskManager } from '../src/control/tasks.ts';
+import { join } from 'node:path';
 import { REGISTRY } from '../src/registry.ts';
 import type { DelegateConfig, Config } from '../src/types.ts';
 
@@ -83,6 +85,7 @@ const projectCwd = process.cwd();
 
 const engine = createEngine({ cfg, apiKey, projectCwd });
 const graph = createGraph({ cwd: projectCwd, model: graphCfg.model, noMedia: graphCfg.noMedia });
+const tasks = createTaskManager(join(projectCwd, '.shuba', 'tasks'));
 
 // Two adapters, two processes, one role each — never both in the same
 // process. The supervisor-spawned sidecar (registry sets
@@ -96,7 +99,7 @@ const httpEnabled = process.env.SHUBA_CONTROL_HTTP === '1';
 if (httpEnabled) {
   const collector = createCollector({ stages: DEFAULT_CHAIN_STAGES });
   const config = { delegate: cfg, graph: graphCfg };
-  const server = createControlHttp(engine, { graph, staticDir: CONSOLE_DIST, collector, config });
+  const server = createControlHttp(engine, { graph, staticDir: CONSOLE_DIST, collector, config, tasks });
   server.on('error', (e) => {
     process.stderr.write(`[shuba-control] http error: ${e.message}\n`);
   });
@@ -139,7 +142,7 @@ if (httpEnabled) {
       });
   }
 } else {
-  void connectStdio(createMcpServer(engine, graph));
+  void connectStdio(createMcpServer(engine, graph, tasks));
   process.stderr.write(
     `[shuba-control] role=stdio-mcp (default harness: ${cfg.default.harness})\n`,
   );

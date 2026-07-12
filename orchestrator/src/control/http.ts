@@ -25,6 +25,13 @@ type Collector = {
   hopLog(limit?: number): Promise<unknown>;
 };
 
+type Tasks = {
+  createTask(input: { priority: string; title: string; description: string; contextFiles?: string[]; source?: string }): unknown;
+  listTasks(status?: string): unknown;
+  getTask(id: string): unknown;
+  updateStatus(id: string, status: string): boolean;
+};
+
 const SECRET_KEY_RE = /api[_-]?key|secret|token|password|passphrase|credential|bearer|private[_-]?key/i;
 
 // redactSecrets recursively walks a value and drops any object key whose
@@ -136,12 +143,14 @@ export function createControlHttp(
     config?: unknown;
     togglesPath?: string;
     chainPath?: string;
+    tasks?: Tasks;
   },
 ): Server {
   const staticDir = opts?.staticDir;
   const graph = opts?.graph;
   const collector = opts?.collector;
   const config = opts?.config;
+  const tasks = opts?.tasks;
   const togglesPath = opts?.togglesPath ?? runtimePath();
   const chainPath = opts?.chainPath ?? configPath();
 
@@ -330,6 +339,76 @@ export function createControlHttp(
       setToggle(stage, enabled, togglesPath);
       persistToggle(stage, enabled, chainPath);
       sendJson(res, 200, togglesView(togglesPath));
+      return;
+    }
+
+    if (tasks && method === 'GET' && pathname === '/api/tasks') {
+      const statusParam = url.searchParams.get('status');
+      sendJson(res, 200, tasks.listTasks(statusParam ?? undefined));
+      return;
+    }
+
+    if (tasks && method === 'POST' && pathname === '/api/tasks') {
+      const contentType = req.headers['content-type'];
+      if (typeof contentType !== 'string' || !contentType.toLowerCase().startsWith('application/json')) {
+        sendJson(res, 415, { error: 'content-type must be application/json' });
+        return;
+      }
+      const raw = await readBody(req);
+      let body: { priority?: unknown; title?: unknown; description?: unknown; context_files?: unknown; source?: unknown };
+      try {
+        body = raw.length > 0 ? JSON.parse(raw) : {};
+      } catch {
+        sendJson(res, 400, { error: 'invalid JSON body' });
+        return;
+      }
+      if (
+        !['critical', 'high', 'medium', 'low'].includes(body.priority as string) ||
+        typeof body.title !== 'string' ||
+        typeof body.description !== 'string'
+      ) {
+        sendJson(res, 400, { error: 'priority, title, description are required' });
+        return;
+      }
+      const contextFiles = Array.isArray(body.context_files)
+        ? (body.context_files as unknown[]).filter((f): f is string => typeof f === 'string')
+        : undefined;
+      const source = typeof body.source === 'string' ? body.source : undefined;
+      sendJson(res, 200, tasks.createTask({
+        priority: body.priority as string,
+        title: body.title,
+        description: body.description,
+        contextFiles,
+        source,
+      }));
+      return;
+    }
+
+    if (tasks && method === 'POST' && segments[0] === 'api' && segments[1] === 'tasks' && segments.length === 3) {
+      const id = segments[2]!;
+      const contentType = req.headers['content-type'];
+      if (typeof contentType !== 'string' || !contentType.toLowerCase().startsWith('application/json')) {
+        sendJson(res, 415, { error: 'content-type must be application/json' });
+        return;
+      }
+      const raw = await readBody(req);
+      let body: { status?: unknown };
+      try {
+        body = raw.length > 0 ? JSON.parse(raw) : {};
+      } catch {
+        sendJson(res, 400, { error: 'invalid JSON body' });
+        return;
+      }
+      if (!['pending', 'completed', 'dismissed'].includes(body.status as string)) {
+        sendJson(res, 400, { error: 'status must be pending, completed, or dismissed' });
+        return;
+      }
+      const updated = tasks.updateStatus(id, body.status as string);
+      if (!updated) {
+        sendJson(res, 404, { error: 'task not found' });
+        return;
+      }
+      sendJson(res, 200, tasks.getTask(id));
       return;
     }
 

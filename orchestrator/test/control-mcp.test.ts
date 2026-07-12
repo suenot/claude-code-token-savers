@@ -35,3 +35,48 @@ test('MCP exposes four tools and routes delegate', async () => {
   assert.equal(engine.calls[0][0], 'delegate');
   assert.match(JSON.stringify(res.content), /job_1/);
 });
+
+function stubTasks() {
+  return {
+    calls: [] as any[],
+    createTask(input: any) {
+      this.calls.push(['createTask', input]);
+      return { id: 'T-001', status: 'pending', ...input };
+    },
+    listTasks(status?: string) {
+      this.calls.push(['listTasks', status]);
+      return [{ id: 'T-001', status: status ?? 'pending' }];
+    },
+    getTask(id: string) {
+      this.calls.push(['getTask', id]);
+      return { id, status: 'pending' };
+    },
+    updateStatus(id: string, status: string) {
+      this.calls.push(['updateStatus', id, status]);
+      return id === 'T-001';
+    },
+  };
+}
+
+test('MCP registers task tools only when a TaskManager is provided, and routes them', async () => {
+  const engine = stubEngine();
+  const tasks = stubTasks();
+  const server = createMcpServer(engine as any, undefined, tasks as any);
+  const [ct, st] = InMemoryTransport.createLinkedPair();
+  const client = new Client({ name: 't', version: '0' });
+  await Promise.all([server.connect(st), client.connect(ct)]);
+  const toolNames = (await client.listTools()).tools.map((t) => t.name).sort();
+  assert.ok(toolNames.includes('shuba_tasks_list'));
+  assert.ok(toolNames.includes('shuba_tasks_create'));
+  assert.ok(toolNames.includes('shuba_tasks_update'));
+
+  await client.callTool({ name: 'shuba_tasks_create', arguments: { priority: 'high', title: 't', description: 'd' } });
+  assert.equal(tasks.calls[0][0], 'createTask');
+
+  await client.callTool({ name: 'shuba_tasks_list', arguments: {} });
+  assert.equal(tasks.calls[1][0], 'listTasks');
+
+  const res: any = await client.callTool({ name: 'shuba_tasks_update', arguments: { id: 'T-001', status: 'completed' } });
+  assert.equal(tasks.calls[2][0], 'updateStatus');
+  assert.equal(JSON.parse(res.content[0].text).updated, true);
+});

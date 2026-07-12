@@ -605,3 +605,101 @@ test('GET /../../etc/passwd (literal traversal) does not escape staticDir', asyn
     }
   });
 });
+
+function stubTasks() {
+  return {
+    calls: [] as any[],
+    createTask(input: any) {
+      this.calls.push(['createTask', input]);
+      return { id: 'T-001', status: 'pending', ...input };
+    },
+    listTasks(status?: string) {
+      this.calls.push(['listTasks', status]);
+      return [{ id: 'T-001', status: status ?? 'pending', title: 'x' }];
+    },
+    getTask(id: string) {
+      this.calls.push(['getTask', id]);
+      return id === 'T-001' ? { id, status: 'completed', title: 'x' } : undefined;
+    },
+    updateStatus(id: string, _status: string) {
+      this.calls.push(['updateStatus', id, _status]);
+      return id === 'T-001';
+    },
+  };
+}
+
+async function withTasksServer(fn: (base: string, tasks: ReturnType<typeof stubTasks>) => Promise<void>) {
+  const engine = stubEngine();
+  const tasks = stubTasks();
+  const server = createControlHttp(engine as any, { tasks: tasks as any });
+  await new Promise<void>((resolve) => server.listen(0, resolve));
+  const addr = server.address();
+  const port = typeof addr === 'object' && addr ? addr.port : 0;
+  const base = `http://127.0.0.1:${port}`;
+  try {
+    await fn(base, tasks);
+  } finally {
+    server.close();
+  }
+}
+
+test('GET /api/tasks is not registered without a tasks collaborator', async () => {
+  await withServer(async (base) => {
+    const res = await fetch(`${base}/api/tasks`);
+    assert.notEqual(res.status, 200);
+  });
+});
+
+test('GET /api/tasks lists tasks, optionally filtered by ?status=', async () => {
+  await withTasksServer(async (base, tasks) => {
+    const res = await fetch(`${base}/api/tasks?status=pending`);
+    assert.equal(res.status, 200);
+    assert.deepEqual(await res.json(), [{ id: 'T-001', status: 'pending', title: 'x' }]);
+    assert.deepEqual(tasks.calls[0], ['listTasks', 'pending']);
+  });
+});
+
+test('POST /api/tasks creates a task, rejects a missing required field', async () => {
+  await withTasksServer(async (base) => {
+    const ok = await fetch(`${base}/api/tasks`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ priority: 'high', title: 't', description: 'd', context_files: ['a.ts'] }),
+    });
+    assert.equal(ok.status, 200);
+    const body: any = await ok.json();
+    assert.equal(body.id, 'T-001');
+
+    const bad = await fetch(`${base}/api/tasks`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ priority: 'high', title: 't' }),
+    });
+    assert.equal(bad.status, 400);
+  });
+});
+
+test('POST /api/tasks/:id updates status, 404s for unknown id, 400s for bad status', async () => {
+  await withTasksServer(async (base) => {
+    const ok = await fetch(`${base}/api/tasks/T-001`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ status: 'completed' }),
+    });
+    assert.equal(ok.status, 200);
+
+    const notFound = await fetch(`${base}/api/tasks/T-999`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ status: 'completed' }),
+    });
+    assert.equal(notFound.status, 404);
+
+    const badStatus = await fetch(`${base}/api/tasks/T-001`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ status: 'bogus' }),
+    });
+    assert.equal(badStatus.status, 400);
+  });
+});

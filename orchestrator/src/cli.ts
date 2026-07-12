@@ -12,6 +12,7 @@ import { registerMcp, unregisterMcp } from './control/mcp-register.ts';
 import { disableClientGraphifyHook } from './control/graphify-hook.ts';
 import { detectHarnesses } from './control/harnesses.ts';
 import { createGraph } from './control/graph.ts';
+import { createTaskManager } from './control/tasks.ts';
 import type { PlanResult, PlannedStage, ChainHandle } from './types.ts';
 import pkg from '../package.json' with { type: 'json' };
 
@@ -170,6 +171,43 @@ function which(bin: string): boolean {
   }
 }
 
+// doTasks prints the top pending shuba tasks (see src/control/tasks.ts),
+// same "print top-N pending items" shape as cmdop-claude's `inject-tasks` —
+// intended to be wired into a UserPromptSubmit hook so pending work resurfaces
+// in every prompt. No-op output (nothing printed) when the queue is empty.
+async function doTasks(argv: string[]): Promise<number> {
+  const sub = argv[1];
+  const tasks = createTaskManager(join(process.cwd(), '.shuba', 'tasks'));
+
+  if (sub === 'list' || sub === undefined) {
+    const status = argv[2] as 'pending' | 'completed' | 'dismissed' | undefined;
+    console.log(JSON.stringify(tasks.listTasks(status), null, 2));
+    return 0;
+  }
+  if (sub === 'inject') {
+    const summary = tasks.getPendingSummary(3);
+    if (summary) console.log(summary);
+    return 0;
+  }
+  if (sub === 'complete' || sub === 'dismiss') {
+    const id = argv[2];
+    if (!id) {
+      console.error(`shuba: usage: shuba tasks ${sub} <id>`);
+      return 1;
+    }
+    const status = sub === 'complete' ? 'completed' : 'dismissed';
+    const ok = tasks.updateStatus(id, status);
+    if (!ok) {
+      console.error(`shuba: task "${id}" not found`);
+      return 1;
+    }
+    console.log(`shuba: task ${id} marked ${status}`);
+    return 0;
+  }
+  console.error('shuba: unknown tasks subcommand — list | inject | complete <id> | dismiss <id>');
+  return 1;
+}
+
 async function doDoctor(): Promise<number> {
   for (const id of Object.keys(REGISTRY)) {
     const bin = REGISTRY[id].bin;
@@ -229,6 +267,7 @@ export async function cli(argv: string[]): Promise<number> {
     console.log('shuba: v1 keeps the chain tied to the foreground `run`/`up` process; stop that process to tear down.');
     return 0;
   }
-  console.error(`shuba: unknown command "${cmd}" — run | up | status | doctor | down`);
+  if (cmd === 'tasks') return doTasks(argv);
+  console.error(`shuba: unknown command "${cmd}" — run | up | status | doctor | down | tasks`);
   return 1;
 }

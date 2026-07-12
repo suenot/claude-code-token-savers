@@ -7,6 +7,7 @@ const WATCHDOG_BIN = fileURLToPath(new URL('../bin/context-watchdog.ts', import.
 const RATELIMIT_BIN = fileURLToPath(new URL('../bin/rate-limiter.ts', import.meta.url));
 const DEDUP_BIN = fileURLToPath(new URL('../bin/dedup.ts', import.meta.url));
 const CRUSH_BIN = fileURLToPath(new URL('../bin/crush.ts', import.meta.url));
+const SKILLINJECT_BIN = fileURLToPath(new URL('../bin/skill-inject.ts', import.meta.url));
 const IMAGE_BIN = fileURLToPath(new URL('../bin/shuba-image-shrink.ts', import.meta.url));
 const ROUTER_BIN = fileURLToPath(new URL('../bin/shuba-model-router.ts', import.meta.url));
 const CONTROL_BIN = fileURLToPath(new URL('../bin/shuba-control.ts', import.meta.url));
@@ -145,6 +146,27 @@ export const REGISTRY: Record<string, StageDescriptor> = {
       if (c.budget !== undefined) env.CRUSH_BUDGET = String(c.budget);
       if (c.enabled === false) env.CRUSH_ENABLED = 'false';
       return { args: [CRUSH_BIN], env };
+    },
+  },
+  'skill-inject': {
+    id: 'skill-inject',
+    builtin: true,
+    bin: process.execPath,
+    defaultPort: 47856,
+    dialect: 'anthropic',
+    terminal: false,
+    healthPath: '/health',
+    build({ port, upstreamBase, config }: BuildContext): BuildResult {
+      const c = (config && config.skillInject) || {};
+      const env: Record<string, string> = {
+        PORT: String(port),
+        SKILLINJECT_UPSTREAM: upstreamBase as string,
+        SKILLINJECT_MODEL: c.classifierModel || 'a8e/auto',
+      };
+      if (c.maxSkills !== undefined) env.SKILLINJECT_MAX_SKILLS = String(c.maxSkills);
+      if (c.storeDir !== undefined) env.SKILLINJECT_STORE_DIR = c.storeDir;
+      if (c.enabled === false) env.SKILLINJECT_ENABLED = 'false';
+      return { args: [SKILLINJECT_BIN], env };
     },
   },
   'image-shrink': {

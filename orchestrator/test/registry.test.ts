@@ -100,6 +100,40 @@ test('crush emits CRUSH_ENABLED=false when disabled in config', () => {
   assert.equal(env.CRUSH_ENABLED, 'false');
 });
 
+test('skill-inject is a builtin node stage wired from config', () => {
+  const d = REGISTRY['skill-inject'];
+  assert.equal(d.builtin, true);
+  assert.equal(d.terminal, false);
+  assert.equal(d.defaultPort, 47856);
+  assert.equal(d.healthPath, '/health');
+  assert.equal(d.bin, process.execPath);
+  const { args, env } = d.build({
+    port: 47856, upstreamBase: 'http://127.0.0.1:8787',
+    config: { skillInject: { maxSkills: 3, classifierModel: 'a8e/auto', storeDir: '/tmp/store' } } as Config,
+  });
+  assert.match(args[0], /bin\/skill-inject\.ts$/);
+  assert.equal(env.PORT, '47856');
+  assert.equal(env.SKILLINJECT_UPSTREAM, 'http://127.0.0.1:8787');
+  assert.equal(env.SKILLINJECT_MAX_SKILLS, '3');
+  assert.equal(env.SKILLINJECT_MODEL, 'a8e/auto');
+  assert.equal(env.SKILLINJECT_STORE_DIR, '/tmp/store');
+  assert.equal(env.SKILLINJECT_ENABLED, undefined); // enabled by default
+});
+
+test('skill-inject applies defaults and omits optional env when config omits them', () => {
+  const { env } = REGISTRY['skill-inject'].build({ port: 47856, upstreamBase: 'http://x' });
+  assert.equal(env.SKILLINJECT_MODEL, 'a8e/auto');
+  assert.equal(env.SKILLINJECT_MAX_SKILLS, undefined);
+  assert.equal(env.SKILLINJECT_STORE_DIR, undefined);
+});
+
+test('skill-inject emits SKILLINJECT_ENABLED=false when disabled in config', () => {
+  const { env } = REGISTRY['skill-inject'].build({
+    port: 47856, upstreamBase: 'http://x', config: { skillInject: { enabled: false } } as Config,
+  });
+  assert.equal(env.SKILLINJECT_ENABLED, 'false');
+});
+
 test('control descriptor is a builtin node sidecar wired from delegate config', () => {
   const d = REGISTRY.control;
   assert.equal(d.builtin, true);

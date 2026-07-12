@@ -43,6 +43,7 @@ export type Config = {
   };
   rateLimiter?: { rps?: number; burst?: number; cooldownMs?: number };
   crush?: { threshold?: number; budget?: number; enabled?: boolean };
+  skillInject?: { enabled?: boolean; maxSkills?: number; classifierModel?: string; storeDir?: string };
   imageShrink?: { scale?: number | string; minBytes?: number };
   modelRouter?: {
     routes?: {

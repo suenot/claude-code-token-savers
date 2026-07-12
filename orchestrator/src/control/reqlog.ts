@@ -202,6 +202,9 @@ export const FUNNEL_STAGE_ORDER = [
   'model-router',
   'thinking-damper',
   'rate-limiter',
+  // Runs last in the funnel view: skill-inject INFLATES requests (negative
+  // saving) — its payoff is Claude Code's own context shrinking, not this hop.
+  'skill-inject',
 ] as const;
 
 export type FunnelStage = {

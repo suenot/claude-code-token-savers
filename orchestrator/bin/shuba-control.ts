@@ -50,8 +50,15 @@ function chainStages(): ChainStage[] {
 const DEFAULT_CHAIN_STAGES: ChainStage[] = chainStages();
 
 const DEFAULT_CFG: DelegateConfig = {
-  default: { harness: 'opencode', model: 'deepseek/deepseek-v4-flash' },
+  default: 'opencode/a8e/a8e-1.0-pro',
 };
+
+// cfg.default is either a target string (harness/provider/…/model) or the
+// legacy object; pull just the harness name for the startup log line.
+function defaultHarnessLabel(cfg: DelegateConfig): string {
+  const d = cfg.default as unknown;
+  return typeof d === 'string' ? d.split('/')[0] : (d as { harness: string }).harness;
+}
 
 function loadCfg(): DelegateConfig {
   const raw = process.env.DELEGATE_JSON;
@@ -105,7 +112,7 @@ if (httpEnabled) {
   });
   server.listen(port, '127.0.0.1');
   process.stderr.write(
-    `[shuba-control] role=http listening on 127.0.0.1:${port} (default harness: ${cfg.default.harness})\n`,
+    `[shuba-control] role=http listening on 127.0.0.1:${port} (default harness: ${defaultHarnessLabel(cfg)})\n`,
   );
 
   // Stop the spawned `graphify watch` child process on teardown so orphaned
@@ -144,6 +151,6 @@ if (httpEnabled) {
 } else {
   void connectStdio(createMcpServer(engine, graph, tasks));
   process.stderr.write(
-    `[shuba-control] role=stdio-mcp (default harness: ${cfg.default.harness})\n`,
+    `[shuba-control] role=stdio-mcp (default harness: ${defaultHarnessLabel(cfg)})\n`,
   );
 }

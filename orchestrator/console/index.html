@@ -167,6 +167,25 @@
       .row-sub { color: var(--faint); font-size: 12px; margin-top: 3px; }
       .badge-ok { color: var(--ok); font-size: 12.5px; }
 
+      /* ---- global form controls (every input on the site) ---- */
+      input[type="text"], input[type="number"], input[type="search"], input:not([type]),
+      textarea, select {
+        background: var(--panel-2); color: var(--text);
+        border: 1px solid var(--border); border-radius: 7px;
+        padding: 7px 10px; font-size: 13px; font-family: var(--font);
+      }
+      input:focus, textarea:focus, select:focus { outline: none; border-color: var(--accent); }
+      input::placeholder, textarea::placeholder { color: var(--faint); }
+      textarea { resize: vertical; min-height: 64px; }
+      /* plain buttons (Delegate/Copy/…) — classed buttons keep their own look */
+      button { font-family: var(--font); cursor: pointer; }
+      button:not(.nav-item):not(.rail-icon):not(.theme-toggle):not(.btn) {
+        background: var(--panel-2); color: var(--text);
+        border: 1px solid var(--border); border-radius: 7px; padding: 7px 13px; font-size: 13px;
+      }
+      button:not(.nav-item):not(.rail-icon):not(.theme-toggle):not(.btn):hover { background: rgba(127,127,127,0.1); }
+      button:disabled { opacity: 0.5; cursor: default; }
+
       /* ---- forms ---- */
       .field { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; }
       .field label { flex: 0 0 190px; color: var(--muted); font-size: 13px; }

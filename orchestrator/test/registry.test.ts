@@ -89,5 +89,5 @@ test('control descriptor is a builtin node sidecar wired from delegate config', 
 test('control applies a default delegate config when config omits delegate', () => {
   const { env } = REGISTRY.control.build({ port: 47830 });
   const parsed = JSON.parse(env.DELEGATE_JSON);
-  assert.deepEqual(parsed.default, { harness: 'opencode', model: 'deepseek/deepseek-v4-flash' });
+  assert.equal(parsed.default, 'opencode/a8e/a8e-1.0-pro');
 });

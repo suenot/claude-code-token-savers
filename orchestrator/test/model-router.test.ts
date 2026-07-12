@@ -39,13 +39,20 @@ test('classify: think / webSearch / background detection', () => {
   assert.equal(classifyRequest({ model: 'claude-haiku-4-5', messages: [] }, {}), 'default');
 });
 
-test('applyRoute: model rewrite for a non-image category', () => {
-  const { body, stats } = applyRoute({ model: 'claude-haiku-4-5', messages: [] }, 'background', { background: { model: 'deepseek/x' } });
-  assert.equal(body.model, 'deepseek/x');
-  assert.equal(stats.routedModel, 'deepseek/x');
+test('applyRoute: known-provider target strips provider into the endpoint', () => {
+  // deepseek is a known provider -> body.model is the bare model, endpoint set.
+  const { body, stats, upstream } = applyRoute({ model: 'claude-haiku-4-5', messages: [] }, 'background', { background: { model: 'deepseek/x' } });
+  assert.equal(body.model, 'x');
+  assert.equal(stats.routedModel, 'x');
+  assert.equal(upstream?.baseUrl, 'https://api.deepseek.com');
 });
 
-test('applyRoute: upstream override carries baseUrl+envKey', () => {
+test('applyRoute: unknown-provider target passes through as body.model', () => {
+  const { body } = applyRoute({ model: 'claude-haiku-4-5', messages: [] }, 'background', { background: { model: 'someprov/x' } });
+  assert.equal(body.model, 'someprov/x');
+});
+
+test('applyRoute: explicit baseUrl override wins over the provider registry', () => {
   const { upstream } = applyRoute(textReq, 'default', { default: { model: 'm', baseUrl: 'http://x', envKey: 'K' } });
   assert.deepEqual(upstream, { baseUrl: 'http://x', envKey: 'K' });
 });

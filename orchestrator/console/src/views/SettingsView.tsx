@@ -29,11 +29,9 @@ type FieldSpec =
 
 type SectionSpec = { title: string; note?: string; fields: FieldSpec[] };
 
-// The route sub-fields shared by every task category.
+// One target input per task category, format harness?/provider/[subprovider/]model.
 const routeFields = (cat: string, extra: FieldSpec[] = []): FieldSpec[] => [
-  { path: `modelRouter.routes.${cat}.model`, label: 'model', type: 'text', placeholder: 'e.g. claude-haiku-4-5' },
-  { path: `modelRouter.routes.${cat}.baseUrl`, label: 'baseUrl (optional)', type: 'text' },
-  { path: `modelRouter.routes.${cat}.envKey`, label: 'envKey (optional)', type: 'text' },
+  { path: `modelRouter.routes.${cat}.model`, label: 'target', type: 'text', placeholder: 'a8e/a8e-1.0-pro', hint: 'provider/[subprovider/]model' },
   ...extra,
 ];
 
@@ -74,13 +72,10 @@ const SECTIONS: SectionSpec[] = [
   },
   {
     title: 'delegate — task offload defaults',
-    note: 'Target = harness / provider / subprovider (optional) / model. The model path sent to the harness is provider/[subprovider/]model — e.g. openrouter/deepseek/a8e-1.0-pro.',
+    note: 'One target string: harness/provider/[subprovider/]model — e.g. opencode/a8e/a8e-1.0-pro. Provider resolves its endpoint automatically (a8e, openrouter, anthropic, deepseek, openai).',
     fields: [
-      { path: 'delegate.default.harness', label: 'default harness', type: 'text', placeholder: 'opencode' },
-      { path: 'delegate.default.provider', label: 'default provider', type: 'text', placeholder: 'openrouter', hint: 'optional' },
-      { path: 'delegate.default.subprovider', label: 'default subprovider', type: 'text', placeholder: 'deepseek', hint: 'optional — for openrouter' },
-      { path: 'delegate.default.model', label: 'default model', type: 'text', placeholder: 'a8e-1.0-pro' },
-      { path: 'delegate.classifierModel', label: 'classifier model', type: 'text', placeholder: 'deepseek/deepseek-v4-flash' },
+      { path: 'delegate.default', label: 'default target', type: 'text', placeholder: 'opencode/a8e/a8e-1.0-pro', hint: 'harness/provider/[subprovider/]model' },
+      { path: 'delegate.classifierModel', label: 'classifier model', type: 'text', placeholder: 'a8e-1.0-pro' },
       { path: 'delegate.baseUrl', label: 'baseUrl', type: 'text' },
       { path: 'delegate.envKey', label: 'envKey', type: 'text' },
       { path: 'delegate.concurrency', label: 'concurrency', type: 'number' },

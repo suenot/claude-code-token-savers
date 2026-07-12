@@ -66,11 +66,15 @@ export function sanitizeSettings(input: unknown): Settings {
   if (Object.keys(routes).length > 0) out.modelRouter = { routes };
 
   const del = (o.delegate as Dict) ?? {};
-  const delDefault = nonEmpty(
-    pick((del.default as Dict) ?? {}, { harness: str, provider: str, subprovider: str, model: str }),
-  );
   const delegate = pick(del, { classifierModel: str, baseUrl: str, envKey: str, concurrency: num, isolation: str });
-  if (delDefault) delegate.default = delDefault;
+  // default is a single-string target (harness/provider/subprovider/model); the
+  // legacy object form is also preserved.
+  if (typeof del.default === 'string' && del.default) {
+    delegate.default = del.default;
+  } else {
+    const delDefault = nonEmpty(pick((del.default as Dict) ?? {}, { harness: str, provider: str, subprovider: str, model: str }));
+    if (delDefault) delegate.default = delDefault;
+  }
   if (Object.keys(delegate).length > 0) out.delegate = delegate;
 
   const graph = nonEmpty(

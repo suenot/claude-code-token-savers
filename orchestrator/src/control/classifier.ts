@@ -1,5 +1,6 @@
 import type { DelegateInput } from './types.ts';
 import { HARNESSES } from './harnesses.ts';
+import { parseTarget } from './target.ts';
 import type { DelegateConfig } from '../types.ts';
 
 export type { DelegateConfig } from '../types.ts';
@@ -24,8 +25,8 @@ async function classify(
   }
 
   const fetchImpl = opts.fetchImpl ?? (fetch as unknown as FetchLike);
-  const baseUrl = cfg.baseUrl ?? 'https://openrouter.ai/api/v1';
-  const model = cfg.classifierModel ?? 'deepseek/deepseek-v4-flash';
+  const baseUrl = cfg.baseUrl ?? 'http://localhost:8080/v1';
+  const model = cfg.classifierModel ?? 'a8e-1.0-pro';
 
   const hints = cfg.policy
     .map((p) => `- when: "${p.when}" -> harness: "${p.harness}", model: "${p.model}"`)
@@ -96,10 +97,17 @@ export function composeModel(t: { provider?: string; subprovider?: string; model
   return [t.provider, t.subprovider, t.model].filter((v): v is string => typeof v === 'string' && v.length > 0).join('/');
 }
 
-// defaultTarget flattens cfg.default (harness + provider/subprovider/model) to
-// the {harness, model} pair the runner consumes.
+// defaultTarget flattens cfg.default to the {harness, model} pair the runner
+// consumes. cfg.default may be a single-string target
+// (harness/provider/subprovider/model) or the legacy object form.
 function defaultTarget(cfg: DelegateConfig): { harness: string; model: string } {
-  return { harness: cfg.default.harness, model: composeModel(cfg.default) };
+  const d = cfg.default as unknown;
+  if (typeof d === 'string') {
+    const t = parseTarget(d);
+    return { harness: t.harness ?? 'opencode', model: t.modelPath };
+  }
+  const obj = d as { harness: string; provider?: string; subprovider?: string; model: string };
+  return { harness: obj.harness, model: composeModel(obj) };
 }
 
 export async function selectHarnessModel(

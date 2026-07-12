@@ -171,7 +171,7 @@ export const REGISTRY: Record<string, StageDescriptor> = {
     terminal: false,
     healthPath: '/health',
     build({ port, config }: BuildContext): BuildResult {
-      const delegate = config?.delegate ?? { default: { harness: 'opencode', model: 'deepseek/deepseek-v4-flash' } };
+      const delegate = config?.delegate ?? { default: 'opencode/a8e/a8e-1.0-pro' };
       const graph = config?.graph ?? {};
       const compressors = config?.compressors ?? [];
       return {

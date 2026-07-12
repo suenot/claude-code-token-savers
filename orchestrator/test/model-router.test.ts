@@ -108,3 +108,72 @@ test('applyRoute image auto: no OCR keyword + no vision model -> passthrough', (
   assert.equal(stats.ocrImages, 0);
   assert.equal(body.model, 'claude-opus-4-8');
 });
+
+// --- thinking damper ---------------------------------------------------------
+
+const thinkingReq = (budget?: number) => ({
+  model: 'claude-haiku-4-5',
+  messages: [],
+  ...(budget === undefined ? {} : { thinking: { type: 'enabled', budget_tokens: budget } }),
+});
+
+test('damper strip: removes the thinking param and reports the removed budget', () => {
+  const { body, stats } = applyRoute(thinkingReq(4000), 'background', { background: { model: 'bg', thinking: 'strip' } });
+  assert.equal('thinking' in body, false, 'thinking removed');
+  assert.equal(stats.thinkingAction, 'strip');
+  assert.equal(stats.thinkingSaved, 4000);
+});
+
+test('damper cap: lowers a budget over the cap to the cap', () => {
+  const { body, stats } = applyRoute(thinkingReq(10000), 'think', { think: { model: 't', thinking: { budget: 2000 } } });
+  assert.equal(body.thinking.budget_tokens, 2000);
+  assert.equal(stats.thinkingAction, 'cap');
+  assert.equal(stats.thinkingSaved, 8000);
+});
+
+test('damper cap: leaves a budget at or below the cap alone', () => {
+  const { body, stats } = applyRoute(thinkingReq(1500), 'think', { think: { model: 't', thinking: { budget: 2000 } } });
+  assert.equal(body.thinking.budget_tokens, 1500, 'unchanged');
+  assert.equal(stats.thinkingAction, undefined);
+  assert.equal(stats.thinkingSaved, 0);
+});
+
+test('damper cap: absent thinking stays absent (never added)', () => {
+  const { body, stats } = applyRoute(thinkingReq(undefined), 'think', { think: { model: 't', thinking: { budget: 2000 } } });
+  assert.equal('thinking' in body, false);
+  assert.equal(stats.thinkingAction, undefined);
+});
+
+test('damper strip: absent thinking stays absent', () => {
+  const { body, stats } = applyRoute(thinkingReq(undefined), 'background', { background: { model: 'bg', thinking: 'strip' } });
+  assert.equal('thinking' in body, false);
+  assert.equal(stats.thinkingAction, undefined);
+  assert.equal(stats.thinkingSaved, 0);
+});
+
+test('damper: non-configured route leaves thinking untouched', () => {
+  const { body, stats } = applyRoute(thinkingReq(5000), 'think', { think: { model: 't' } });
+  assert.equal(body.thinking.budget_tokens, 5000);
+  assert.equal(stats.thinkingAction, undefined);
+});
+
+test('damper: background category strips thinking by default', () => {
+  const { body, stats } = applyRoute(thinkingReq(3000), 'background', { background: { model: 'bg' } });
+  assert.equal('thinking' in body, false, 'stripped without explicit config');
+  assert.equal(stats.thinkingAction, 'strip');
+  assert.equal(stats.thinkingSaved, 3000);
+});
+
+test('damper: background route can opt out with keep', () => {
+  const { body, stats } = applyRoute(thinkingReq(3000), 'background', { background: { model: 'bg', thinking: 'keep' } });
+  assert.equal(body.thinking.budget_tokens, 3000, 'preserved');
+  assert.equal(stats.thinkingAction, undefined);
+});
+
+test('damper strip: enabled thinking without a budget still strips (0 saved)', () => {
+  const req = { model: 'claude-haiku-4-5', messages: [], thinking: { type: 'enabled' } };
+  const { body, stats } = applyRoute(req, 'background', { background: { model: 'bg' } });
+  assert.equal('thinking' in body, false);
+  assert.equal(stats.thinkingAction, 'strip');
+  assert.equal(stats.thinkingSaved, 0);
+});

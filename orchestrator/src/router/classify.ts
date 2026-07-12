@@ -7,7 +7,16 @@ import { estimateTokens } from '../watchdog/estimate.ts';
 
 export type Category = 'longContext' | 'image' | 'think' | 'webSearch' | 'background' | 'default';
 
-export type Route = { model?: string; baseUrl?: string; envKey?: string };
+// Per-route control of the outgoing `thinking` param (the "thinking damper"):
+//   'strip'         — remove `thinking` entirely (model runs without extended
+//                     thinking; output tokens saved).
+//   'keep'          — leave `thinking` untouched (opt out of the background
+//                     default below).
+//   { budget: N }   — cap: if body.thinking.budget_tokens > N, lower it to N;
+//                     never adds thinking when the body has none.
+// Routes in the 'background' category strip by default unless they set this.
+export type ThinkingControl = 'strip' | 'keep' | { budget: number };
+export type Route = { model?: string; baseUrl?: string; envKey?: string; thinking?: ThinkingControl };
 export type ImageRoute = Route & {
   mode?: 'auto' | 'ocr' | 'vision-route' | 'off';
   dropImage?: boolean;

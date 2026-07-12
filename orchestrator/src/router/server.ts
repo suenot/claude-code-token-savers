@@ -120,13 +120,14 @@ export function createModelRouter({
             const category = classifyRequest(body, routes);
             if (category !== 'default' || routes.default) {
               const { body: rewritten, upstream: override, stats } = applyRoute(body, category, routes);
-              const changed = stats.routedModel || stats.ocrImages > 0 || override;
+              const changed = stats.routedModel || stats.ocrImages > 0 || override || stats.thinkingAction;
               if (changed) {
                 log(
                   'routed',
                   category,
                   stats.routedModel ? `model=${stats.routedModel}` : '',
                   stats.ocrImages ? `ocr=${stats.ocrImages}` : '',
+                  stats.thinkingAction ? `think=${stats.thinkingAction}(-${stats.thinkingSaved})` : '',
                   override ? `→${override.baseUrl}` : '',
                 );
                 const status = await forward(req, Buffer.from(JSON.stringify(rewritten)), res, override);
@@ -134,6 +135,26 @@ export function createModelRouter({
                   model: stats.routedModel ?? summary?.model,
                   ...(stats.tokensSaved > 0 ? { tokensSaved: stats.tokensSaved } : {}),
                 });
+                // The thinking damper is its own funnel stage: log its savings
+                // separately under 'thinking-damper' so they don't fold into the
+                // model-router's own tokensSaved. Best-effort, like all logging.
+                if (stats.thinkingAction) {
+                  try {
+                    appendReqLog({
+                      ts: new Date().toISOString(),
+                      stage: 'thinking-damper',
+                      method: req.method || 'POST',
+                      path: req.url || '',
+                      action: 'intercept',
+                      upstreamStatus: status,
+                      ...summary,
+                      model: stats.routedModel ?? summary?.model,
+                      tokensSaved: stats.thinkingSaved,
+                    });
+                  } catch {
+                    /* logging must never affect the response path */
+                  }
+                }
                 return;
               }
             }

@@ -4,7 +4,7 @@
 // endpoint + key. The image category additionally runs OCR extraction per its
 // `mode`.
 
-import type { Category, Routes, Route, ImageRoute } from './classify.ts';
+import type { Category, Routes, Route, ImageRoute, ThinkingControl } from './classify.ts';
 import { hasOcrKeyword } from './classify.ts';
 import { extractText, type SpawnLike } from '../image/ocr.ts';
 import { resolveTarget } from '../control/providers.ts';
@@ -16,7 +16,20 @@ const DEFAULT_VISION_TARGET = 'a8e/a8e-1.0-flash';
 const FORMATS = new Set(['image/png', 'image/jpeg', 'image/webp']);
 
 export type Upstream = { baseUrl: string; envKey?: string };
-export type ApplyStats = { category: Category; routedModel?: string; ocrImages: number; tokensSaved: number };
+export type ApplyStats = {
+  category: Category;
+  routedModel?: string;
+  ocrImages: number;
+  tokensSaved: number;
+  // Thinking damper: set only when the outgoing `thinking` param was actually
+  // modified. `thinkingSaved` is the budget_tokens removed (strip) or reduced
+  // (cap) — the honest upper bound on thinking tokens the request permitted;
+  // actual thinking usage varies and is usually lower. Telemetry is logged
+  // under a separate stage id ('thinking-damper'), so this is kept apart from
+  // the model-router's own `tokensSaved` above.
+  thinkingAction?: 'strip' | 'cap';
+  thinkingSaved: number;
+};
 export type ApplyResult = { body: any; upstream?: Upstream; stats: ApplyStats };
 
 function estImageTokens(block: any): number {
@@ -35,6 +48,53 @@ function targetOf(route: Route, raw: string): { model: string; upstream?: Upstre
       ? { baseUrl: r.baseUrl, envKey: r.envKey }
       : undefined;
   return { model: r.model, upstream };
+}
+
+// Read the budget_tokens on a body's `thinking` param, if it carries one. A
+// thinking param can be enabled without an explicit budget (e.g. { type:
+// 'enabled' }), in which case the request permitted no bounded budget and the
+// removable estimate is 0.
+function budgetOf(body: any): number {
+  const t = body?.thinking;
+  if (t && typeof t === 'object' && typeof t.budget_tokens === 'number' && t.budget_tokens > 0) {
+    return t.budget_tokens;
+  }
+  return 0;
+}
+
+// Resolve the thinking control for a category: an explicit route.thinking wins;
+// otherwise the 'background' (cheap) category strips by default. Every other
+// category is left untouched unless its route opts in.
+function thinkingControlFor(route: Route | undefined, category: Category): ThinkingControl | undefined {
+  if (route && route.thinking !== undefined) return route.thinking;
+  if (category === 'background') return 'strip';
+  return undefined;
+}
+
+// Apply the thinking damper to the outgoing body. Returns the (possibly
+// rewritten) body plus what it did, for telemetry. Never adds a thinking param
+// that wasn't there; only strips or lowers an existing one.
+function applyThinkingDamper(
+  body: any,
+  route: Route | undefined,
+  category: Category,
+): { body: any; action?: 'strip' | 'cap'; saved: number } {
+  const control = thinkingControlFor(route, category);
+  if (!control || control === 'keep') return { body, saved: 0 };
+
+  if (control === 'strip') {
+    if (!body || body.thinking === undefined) return { body, saved: 0 };
+    const saved = budgetOf(body); // honest upper bound; actual thinking usage varies
+    const { thinking, ...rest } = body;
+    return { body: rest, action: 'strip', saved };
+  }
+
+  // budget cap
+  const cap = control.budget;
+  const current = budgetOf(body);
+  if (current <= cap) return { body, saved: 0 }; // absent or already within cap → untouched
+  const saved = current - cap;
+  return { body: { ...body, thinking: { ...body.thinking, budget_tokens: cap } }, action: 'cap', saved };
 }
 
 // OCR-extract text from each image (mode 'ocr' only); optionally drop the pixels.
@@ -76,7 +136,18 @@ export function applyRoute(
   routes: Routes,
   opts: { spawnImpl?: SpawnLike } = {},
 ): ApplyResult {
-  const stats: ApplyStats = { category, ocrImages: 0, tokensSaved: 0 };
+  const stats: ApplyStats = { category, ocrImages: 0, tokensSaved: 0, thinkingSaved: 0 };
+
+  // damp folds the thinking damper into a result body, recording what it did on
+  // `stats`. Called at each return so every routed path is damped consistently.
+  const damp = (outBody: any, route: Route | undefined): any => {
+    const d = applyThinkingDamper(outBody, route, category);
+    if (d.action) {
+      stats.thinkingAction = d.action;
+      stats.thinkingSaved = d.saved;
+    }
+    return d.body;
+  };
 
   if (category === 'image') {
     const route = routes.image ?? {};
@@ -105,15 +176,16 @@ export function applyRoute(
       stats.routedModel = t.model;
       upstream = t.upstream;
     }
-    return { body: outBody, upstream, stats };
+    return { body: damp(outBody, routes.image), upstream, stats };
   }
 
   const route: Route | undefined = (routes as any)[category];
   if (!route || typeof route.model !== 'string' || !route.model) {
-    if (category === 'default' && !routes.default) return { body, stats };
-    return { body, stats };
+    // No model rewrite for this category, but the damper still applies — e.g. a
+    // background route can strip thinking without changing the model.
+    return { body: damp(body, route), stats };
   }
   const t = targetOf(route, route.model);
   stats.routedModel = t.model;
-  return { body: { ...body, model: t.model }, upstream: t.upstream, stats };
+  return { body: damp({ ...body, model: t.model }, route), upstream: t.upstream, stats };
 }

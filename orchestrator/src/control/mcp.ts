@@ -3,6 +3,7 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import type { DelegateInput, ExperimentInput } from './types.ts';
 import type { TaskManager } from './tasks.ts';
+import type { McpGateway } from './mcp-gateway.ts';
 
 export type Engine = {
   delegate(input: DelegateInput): Promise<unknown>;
@@ -33,7 +34,12 @@ function textResult(value: unknown): { content: Array<{ type: 'text'; text: stri
   return { content: [{ type: 'text', text: JSON.stringify(value) }] };
 }
 
-export function createMcpServer(engine: Engine, graph?: Graph, tasks?: TaskManager): McpServer {
+export function createMcpServer(
+  engine: Engine,
+  graph?: Graph,
+  tasks?: TaskManager,
+  gateway?: McpGateway,
+): McpServer {
   const server = new McpServer({ name: 'shuba-control', version: '0.1.0' });
 
   server.registerTool(
@@ -150,6 +156,32 @@ export function createMcpServer(engine: Engine, graph?: Graph, tasks?: TaskManag
         inputSchema: { id: z.string(), status: z.enum(['pending', 'completed', 'dismissed']) },
       },
       async ({ id, status }) => textResult({ updated: tasks.updateStatus(id, status) }),
+    );
+  }
+
+  if (gateway) {
+    server.registerTool(
+      'shuba_gateway_list',
+      {
+        description:
+          'List MCP servers imported into shuba, or, with `server`, list one server\'s tools. These are the MCP servers reachable through shuba-control as a gateway.',
+        inputSchema: { server: z.string().optional() },
+      },
+      async ({ server }) =>
+        textResult(server ? await gateway.listTools(server) : gateway.listServers()),
+    );
+
+    server.registerTool(
+      'shuba_gateway_call',
+      {
+        description: 'Call a tool on an imported MCP server through the shuba-control gateway.',
+        inputSchema: {
+          server: z.string(),
+          tool: z.string(),
+          args: z.record(z.string(), z.unknown()).optional(),
+        },
+      },
+      async ({ server, tool, args }) => textResult(await gateway.callTool(server, tool, args ?? {})),
     );
   }
 

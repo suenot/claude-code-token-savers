@@ -86,6 +86,66 @@ function stubTasks() {
   };
 }
 
+function stubGateway() {
+  return {
+    calls: [] as any[],
+    listServers() {
+      this.calls.push(['listServers']);
+      return [{ id: 'srv', name: 'Srv', running: true, toolCount: 2 }];
+    },
+    async listTools(id: string) {
+      this.calls.push(['listTools', id]);
+      return [{ name: 'ping' }];
+    },
+    async callTool(id: string, tool: string, args: unknown) {
+      this.calls.push(['callTool', id, tool, args]);
+      return { ok: true, echo: args };
+    },
+    dispose() {},
+  };
+}
+
+test('MCP registers gateway tools only when a gateway is provided, and routes them', async () => {
+  const engine = stubEngine();
+  const gateway = stubGateway();
+  const server = createMcpServer(engine as any, undefined, undefined, gateway as any);
+  const [ct, st] = InMemoryTransport.createLinkedPair();
+  const client = new Client({ name: 't', version: '0' });
+  await Promise.all([server.connect(st), client.connect(ct)]);
+
+  const toolNames = (await client.listTools()).tools.map((t) => t.name).sort();
+  assert.ok(toolNames.includes('shuba_gateway_list'));
+  assert.ok(toolNames.includes('shuba_gateway_call'));
+
+  // no `server` arg -> list servers
+  const listRes: any = await client.callTool({ name: 'shuba_gateway_list', arguments: {} });
+  assert.equal(gateway.calls[0][0], 'listServers');
+  assert.match(JSON.stringify(listRes.content), /srv/);
+
+  // with `server` -> list that server's tools
+  await client.callTool({ name: 'shuba_gateway_list', arguments: { server: 'srv' } });
+  assert.deepEqual(gateway.calls[1], ['listTools', 'srv']);
+
+  const callRes: any = await client.callTool({
+    name: 'shuba_gateway_call',
+    arguments: { server: 'srv', tool: 'ping', args: { x: 1 } },
+  });
+  assert.equal(gateway.calls[2][0], 'callTool');
+  assert.deepEqual(gateway.calls[2].slice(1), ['srv', 'ping', { x: 1 }]);
+  assert.equal(JSON.parse(callRes.content[0].text).ok, true);
+});
+
+test('MCP omits gateway tools when no gateway is provided', async () => {
+  const engine = stubEngine();
+  const server = createMcpServer(engine as any);
+  const [ct, st] = InMemoryTransport.createLinkedPair();
+  const client = new Client({ name: 't', version: '0' });
+  await Promise.all([server.connect(st), client.connect(ct)]);
+  const toolNames = (await client.listTools()).tools.map((t) => t.name);
+  assert.ok(!toolNames.includes('shuba_gateway_list'));
+  assert.ok(!toolNames.includes('shuba_gateway_call'));
+});
+
 test('MCP registers task tools only when a TaskManager is provided, and routes them', async () => {
   const engine = stubEngine();
   const tasks = stubTasks();

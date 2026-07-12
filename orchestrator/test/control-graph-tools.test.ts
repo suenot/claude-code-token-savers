@@ -24,6 +24,16 @@ function stubEngine() {
     listJobs() {
       return [];
     },
+    async experimentRun(i: any) {
+      this.calls.push(['experimentRun', i]);
+      return { experiment_id: 'exp_1', job_ids: ['job_1'] };
+    },
+    experimentStatus(id: string) {
+      return { id, status: 'running', candidates: [], winnerJobId: null, reason: '' };
+    },
+    experimentList() {
+      return [];
+    },
   };
 }
 
@@ -41,7 +51,7 @@ function stubGraph() {
   };
 }
 
-test('MCP exposes six tools including graph tools and routes them', async () => {
+test('MCP exposes the base + graph tools and routes them', async () => {
   const engine = stubEngine();
   const graph = stubGraph();
   const server = createMcpServer(engine as any, graph as any);
@@ -51,6 +61,8 @@ test('MCP exposes six tools including graph tools and routes them', async () => 
   const tools = (await client.listTools()).tools.map((t) => t.name).sort();
   assert.deepEqual(tools, [
     'shuba_delegate',
+    'shuba_experiment_run',
+    'shuba_experiment_status',
     'shuba_graph_query',
     'shuba_graph_status',
     'shuba_harness_list',
@@ -74,7 +86,14 @@ test('MCP without graph does not register graph tools', async () => {
   const client = new Client({ name: 't', version: '0' });
   await Promise.all([server.connect(st), client.connect(ct)]);
   const tools = (await client.listTools()).tools.map((t) => t.name).sort();
-  assert.deepEqual(tools, ['shuba_delegate', 'shuba_harness_list', 'shuba_job_result', 'shuba_job_status']);
+  assert.deepEqual(tools, [
+    'shuba_delegate',
+    'shuba_experiment_run',
+    'shuba_experiment_status',
+    'shuba_harness_list',
+    'shuba_job_result',
+    'shuba_job_status',
+  ]);
 });
 
 async function withServer(

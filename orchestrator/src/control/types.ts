@@ -37,8 +37,37 @@ export type JobRecord = {
   // manifest so the job JSON stays small. Absent when cwd isn't a git repo or
   // any git command failed.
   snapshot?: { commit: string; dirty: boolean; files: number };
+  // Size of the finalized worktree diff (files changed, byte length). Set only
+  // for worktree jobs; the experiment runner uses `bytes` to pick the smallest
+  // passing change among candidates.
+  diffStats?: { files: number; bytes: number };
   worktreePath?: string;
   error?: string;
+};
+
+// A single experiment: N candidate jobs run for one task, best kept. Persisted
+// as JSON next to the jobs; the winner is chosen deterministically (v1, no LLM
+// judge) — the smallest diff among candidates that passed every gate ('keep').
+export type ExperimentRecord = {
+  id: string;
+  task: string;
+  cwd: string;
+  scope?: string[];
+  validate?: string;
+  createdAt: number;
+  status: 'running' | 'done';
+  candidates: Array<{ jobId: string; harness: string; model: string | null }>;
+  winnerJobId: string | null;
+  // One-line explanation of why this winner was chosen, or why none was.
+  reason: string;
+};
+
+export type ExperimentInput = {
+  task: string;
+  variants: Array<{ harness: string; model?: string }>;
+  cwd?: string;
+  scope?: string[];
+  validate?: string;
 };
 
 export type DelegateInput = {

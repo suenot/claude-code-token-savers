@@ -14,6 +14,8 @@ type Engine = {
   result(id: string): unknown;
   harnessList(): unknown;
   listJobs(): unknown;
+  experimentList(): unknown;
+  experimentStatus(id: string): unknown;
 };
 
 type Graph = {
@@ -232,6 +234,17 @@ export function createControlHttp(
     if (method === 'GET' && segments[0] === 'api' && segments[1] === 'jobs' && segments.length === 3) {
       const id = segments[2]!;
       sendJson(res, 200, engine.status(id));
+      return;
+    }
+
+    if (method === 'GET' && pathname === '/api/experiments') {
+      sendJson(res, 200, engine.experimentList());
+      return;
+    }
+
+    if (method === 'GET' && segments[0] === 'api' && segments[1] === 'experiments' && segments.length === 3) {
+      const id = segments[2]!;
+      sendJson(res, 200, engine.experimentStatus(id));
       return;
     }
 

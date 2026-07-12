@@ -75,12 +75,12 @@ export function createRunner(opts: {
       // finalize info (removed=true means the diff was empty) so the caller can
       // classify the outcome; returns undefined when there was no worktree or
       // finalize threw, both of which we treat as "not removed".
-      const finalizeWorktreeSafe = (): { removed: boolean; files: string[] } | undefined => {
+      const finalizeWorktreeSafe = (): { removed: boolean; files: string[]; bytes: number } | undefined => {
         if (!worktreePath) return undefined;
         try {
           const { diff, removed, files } = finalizeWorktreeImpl(job.cwd, worktreePath);
           store.appendLog(job.id, `\n--- worktree diff (removed=${removed}) ---\n${diff}\n`);
-          return { removed, files };
+          return { removed, files, bytes: Buffer.byteLength(diff) };
         } catch (err) {
           const message = err instanceof Error ? err.message : String(err);
           store.appendLog(job.id, `\n--- finalize worktree error ---\n${message}\n`);
@@ -187,6 +187,9 @@ export function createRunner(opts: {
               status: code === 0 ? 'done' : 'failed',
               outcome,
               endedAt: now(),
+              // Diff size, for the experiment runner to compare candidates
+              // (smallest passing change wins). Only known for worktree jobs.
+              ...(finalized ? { diffStats: { files: finalized.files.length, bytes: finalized.bytes } } : {}),
             });
             resolve();
           });

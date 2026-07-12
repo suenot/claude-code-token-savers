@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
-import type { DelegateInput } from './types.ts';
+import type { DelegateInput, ExperimentInput } from './types.ts';
 import type { TaskManager } from './tasks.ts';
 
 export type Engine = {
@@ -9,6 +9,8 @@ export type Engine = {
   status(id: string): unknown;
   result(id: string): unknown;
   harnessList(): unknown;
+  experimentRun(input: ExperimentInput): Promise<unknown>;
+  experimentStatus(id: string): unknown;
 };
 
 export type Graph = {
@@ -68,6 +70,31 @@ export function createMcpServer(engine: Engine, graph?: Graph, tasks?: TaskManag
       inputSchema: {},
     },
     async () => textResult(engine.harnessList()),
+  );
+
+  server.registerTool(
+    'shuba_experiment_run',
+    {
+      description:
+        'Run N candidate harnesses for one task (each in its own worktree) and keep the best. Returns an experiment id.',
+      inputSchema: {
+        task: z.string(),
+        variants: z.array(z.object({ harness: z.string(), model: z.string().optional() })),
+        scope: z.array(z.string()).optional(),
+        validate: z.string().optional(),
+        cwd: z.string().optional(),
+      },
+    },
+    async (input) => textResult(await engine.experimentRun(input as ExperimentInput)),
+  );
+
+  server.registerTool(
+    'shuba_experiment_status',
+    {
+      description: 'Get the status and winner of an experiment.',
+      inputSchema: { experiment_id: z.string() },
+    },
+    async ({ experiment_id }) => textResult(engine.experimentStatus(experiment_id)),
   );
 
   if (graph) {

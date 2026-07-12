@@ -6,7 +6,8 @@ import { createRunner } from './runner.ts';
 type Runner = { run(job: import('./types.ts').JobRecord): Promise<void> };
 import { HARNESSES, detectHarnesses } from './harnesses.ts';
 import { selectHarnessModel, type DelegateConfig } from './classifier.ts';
-import type { DelegateInput, JobStatus } from './types.ts';
+import { createExperiments, type Experiments } from './experiment.ts';
+import type { DelegateInput, ExperimentInput, ExperimentRecord, JobStatus } from './types.ts';
 
 const TAIL_BYTES = 2048;
 
@@ -18,12 +19,16 @@ export function createEngine(opts: {
   apiKey?: string;
   projectCwd: string;
   now?: () => number;
+  experiments?: Experiments;
 }): {
   delegate(input: DelegateInput): Promise<{ job_id: string; harness_chosen: string; model_chosen: string }>;
   status(id: string): { status: JobStatus; harness: string; model: string | null; elapsed_ms: number | null; tail: string } | { error: string };
   result(id: string): { status: JobStatus; result: string; exit_code: number | null; log_path: string } | { error: string };
   harnessList(): Array<{ id: string; bin: string; installed: boolean }>;
   listJobs(): ReturnType<Store['list']>;
+  experimentRun(input: ExperimentInput): Promise<{ experiment_id: string; job_ids: string[] }>;
+  experimentStatus(id: string): ExperimentRecord | { error: string };
+  experimentList(): ExperimentRecord[];
 } {
   const store = opts.store ?? createStore({});
   const runner = opts.runner ?? createRunner({ store });
@@ -54,23 +59,31 @@ export function createEngine(opts: {
     }
   }
 
+  async function delegate(
+    input: DelegateInput,
+  ): Promise<{ job_id: string; harness_chosen: string; model_chosen: string }> {
+    const { harness, model } = await select(input, opts.cfg, { apiKey: opts.apiKey });
+    const job = store.create({
+      id: '',
+      task: input.task,
+      harness,
+      model,
+      cwd: input.cwd ?? opts.projectCwd,
+      isolation: input.isolation ?? opts.cfg.isolation ?? 'none',
+      scope: input.scope,
+      validate: input.validate,
+    });
+    queue.push(job.id);
+    pump();
+    return { job_id: job.id, harness_chosen: harness, model_chosen: model };
+  }
+
+  // Experiment runner shares this engine's store and delegate path, so its
+  // candidate jobs flow through the same queue/concurrency as any other job.
+  const experiments = opts.experiments ?? createExperiments({ store, delegate, now });
+
   return {
-    async delegate(input) {
-      const { harness, model } = await select(input, opts.cfg, { apiKey: opts.apiKey });
-      const job = store.create({
-        id: '',
-        task: input.task,
-        harness,
-        model,
-        cwd: input.cwd ?? opts.projectCwd,
-        isolation: input.isolation ?? opts.cfg.isolation ?? 'none',
-        scope: input.scope,
-        validate: input.validate,
-      });
-      queue.push(job.id);
-      pump();
-      return { job_id: job.id, harness_chosen: harness, model_chosen: model };
-    },
+    delegate,
 
     status(id) {
       const job = store.get(id);
@@ -109,6 +122,18 @@ export function createEngine(opts: {
 
     listJobs() {
       return store.list();
+    },
+
+    experimentRun(input) {
+      return experiments.run(input);
+    },
+
+    experimentStatus(id) {
+      return experiments.status(id);
+    },
+
+    experimentList() {
+      return experiments.list();
     },
   };
 }

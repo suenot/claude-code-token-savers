@@ -111,7 +111,7 @@ test('outcome: keep — worktree job exits 0 with a non-empty diff (removed=fals
   const store = createStore({ dir: mkdtempSync(join(tmpdir(),'r-')), now: () => 7 });
   const job = store.create({ id:'', task:'t', harness:'gemini', model:null, cwd:'/repo', isolation:'worktree' } as any);
   const createWorktreeImpl = (() => ({ path: '/repo/.shuba-worktrees/x' })) as any;
-  const finalizeWorktreeImpl = (() => ({ diff: 'diff --git a b', removed: false })) as any;
+  const finalizeWorktreeImpl = (() => ({ diff: 'diff --git a b', removed: false, files: ['a'] })) as any;
   const runner = createRunner({ store, spawnImpl: fakeSpawn('', 0) as any, createWorktreeImpl, finalizeWorktreeImpl });
   await runner.run(store.get(job.id)!);
   assert.equal(store.get(job.id)!.outcome, 'keep');
@@ -121,7 +121,7 @@ test('outcome: no-change — worktree job exits 0 but diff was empty (removed=tr
   const store = createStore({ dir: mkdtempSync(join(tmpdir(),'r-')), now: () => 7 });
   const job = store.create({ id:'', task:'t', harness:'gemini', model:null, cwd:'/repo', isolation:'worktree' } as any);
   const createWorktreeImpl = (() => ({ path: '/repo/.shuba-worktrees/x' })) as any;
-  const finalizeWorktreeImpl = (() => ({ diff: '', removed: true })) as any;
+  const finalizeWorktreeImpl = (() => ({ diff: '', removed: true, files: [] })) as any;
   const runner = createRunner({ store, spawnImpl: fakeSpawn('', 0) as any, createWorktreeImpl, finalizeWorktreeImpl });
   await runner.run(store.get(job.id)!);
   assert.equal(store.get(job.id)!.status, 'done');
@@ -353,6 +353,24 @@ test('snapshot git failure → job still runs, snapshot absent, log line present
   assert.equal(done.status, 'done');            // job ran regardless
   assert.equal(done.snapshot, undefined);
   assert.match(store.readLog(job.id), /snapshot skipped/);
+});
+
+test('diffStats — worktree keep records file count and diff byte length', async () => {
+  const store = createStore({ dir: mkdtempSync(join(tmpdir(),'r-')), now: () => 7 });
+  const job = store.create({ id:'', task:'t', harness:'gemini', model:null, cwd:'/repo', isolation:'worktree' } as any);
+  const createWorktreeImpl = (() => ({ path: '/repo/.shuba-worktrees/x' })) as any;
+  const finalizeWorktreeImpl = (() => ({ diff: 'abcde', removed: false, files: ['a.ts', 'b.ts'] })) as any;
+  const runner = createRunner({ store, spawnImpl: fakeSpawn('', 0) as any, createWorktreeImpl, finalizeWorktreeImpl });
+  await runner.run(store.get(job.id)!);
+  assert.deepEqual(store.get(job.id)!.diffStats, { files: 2, bytes: 5 });
+});
+
+test('diffStats — non-worktree job has no diffStats', async () => {
+  const store = createStore({ dir: mkdtempSync(join(tmpdir(),'r-')), now: () => 7 });
+  const job = store.create({ id:'', task:'t', harness:'gemini', model:null, cwd:'/r', isolation:'none' } as any);
+  const runner = createRunner({ store, spawnImpl: fakeSpawn('', 0) as any });
+  await runner.run(store.get(job.id)!);
+  assert.equal(store.get(job.id)!.diffStats, undefined);
 });
 
 test('finalizeWorktree throws on close → run() still resolves, job terminal, error logged', async () => {

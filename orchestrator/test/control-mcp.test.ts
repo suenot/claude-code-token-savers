@@ -20,20 +20,48 @@ function stubEngine() {
     harnessList() {
       return [{ id: 'opencode', bin: 'opencode', installed: true }];
     },
+    async experimentRun(i: any) {
+      this.calls.push(['experimentRun', i]);
+      return { experiment_id: 'exp_1', job_ids: ['job_1'] };
+    },
+    experimentStatus(id: string) {
+      return { id, status: 'running', candidates: [], winnerJobId: null, reason: '' };
+    },
   };
 }
 
-test('MCP exposes four tools and routes delegate', async () => {
+test('MCP exposes the base tools and routes delegate', async () => {
   const engine = stubEngine();
   const server = createMcpServer(engine as any);
   const [ct, st] = InMemoryTransport.createLinkedPair();
   const client = new Client({ name: 't', version: '0' });
   await Promise.all([server.connect(st), client.connect(ct)]);
   const tools = (await client.listTools()).tools.map((t) => t.name).sort();
-  assert.deepEqual(tools, ['shuba_delegate', 'shuba_harness_list', 'shuba_job_result', 'shuba_job_status']);
+  assert.deepEqual(tools, [
+    'shuba_delegate',
+    'shuba_experiment_run',
+    'shuba_experiment_status',
+    'shuba_harness_list',
+    'shuba_job_result',
+    'shuba_job_status',
+  ]);
   const res: any = await client.callTool({ name: 'shuba_delegate', arguments: { task: 'do it' } });
   assert.equal(engine.calls[0][0], 'delegate');
   assert.match(JSON.stringify(res.content), /job_1/);
+});
+
+test('MCP routes shuba_experiment_run to the engine', async () => {
+  const engine = stubEngine();
+  const server = createMcpServer(engine as any);
+  const [ct, st] = InMemoryTransport.createLinkedPair();
+  const client = new Client({ name: 't', version: '0' });
+  await Promise.all([server.connect(st), client.connect(ct)]);
+  const res: any = await client.callTool({
+    name: 'shuba_experiment_run',
+    arguments: { task: 'do it', variants: [{ harness: 'gemini' }, { harness: 'qwen' }] },
+  });
+  assert.equal(engine.calls[0][0], 'experimentRun');
+  assert.match(JSON.stringify(res.content), /exp_1/);
 });
 
 function stubTasks() {

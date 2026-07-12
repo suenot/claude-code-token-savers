@@ -9,7 +9,7 @@ export type Category = 'longContext' | 'image' | 'think' | 'webSearch' | 'backgr
 
 export type Route = { model?: string; baseUrl?: string; envKey?: string };
 export type ImageRoute = Route & {
-  mode?: 'ocr' | 'vision-route' | 'off';
+  mode?: 'auto' | 'ocr' | 'vision-route' | 'off';
   dropImage?: boolean;
   ocrCommand?: string;
   ocrLang?: string;
@@ -30,6 +30,24 @@ export function hasImage(body: any): boolean {
   return body.messages.some(
     (m: any) => Array.isArray(m?.content) && m.content.some((b: any) => b && b.type === 'image'),
   );
+}
+
+// hasOcrKeyword: true when any user text mentions "ocr" (case-insensitive). The
+// image route's `auto` mode uses this — text says OCR → extract text locally
+// (free); otherwise the image is real analysis → send to a vision model.
+export function hasOcrKeyword(body: any): boolean {
+  if (!body || !Array.isArray(body.messages)) return false;
+  for (const m of body.messages) {
+    const c = m?.content;
+    if (typeof c === 'string') {
+      if (/ocr/i.test(c)) return true;
+    } else if (Array.isArray(c)) {
+      for (const b of c) {
+        if (b && b.type === 'text' && typeof b.text === 'string' && /ocr/i.test(b.text)) return true;
+      }
+    }
+  }
+  return false;
 }
 
 function isThinking(body: any): boolean {

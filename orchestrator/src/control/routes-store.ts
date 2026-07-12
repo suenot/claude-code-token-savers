@@ -26,7 +26,7 @@ function sanitizeRoute(category: Category, input: unknown): Route | null {
     out.threshold = o.threshold;
   }
   if (category === 'image') {
-    if (o.mode === 'ocr' || o.mode === 'vision-route' || o.mode === 'off') out.mode = o.mode;
+    if (o.mode === 'auto' || o.mode === 'ocr' || o.mode === 'vision-route' || o.mode === 'off') out.mode = o.mode;
     if (typeof o.dropImage === 'boolean') out.dropImage = o.dropImage;
     for (const k of ['ocrCommand', 'ocrLang'] as const) {
       if (typeof o[k] === 'string' && o[k]) out[k] = o[k];

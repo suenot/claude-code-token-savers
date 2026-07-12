@@ -5,6 +5,7 @@
 // `mode`.
 
 import type { Category, Routes, Route, ImageRoute } from './classify.ts';
+import { hasOcrKeyword } from './classify.ts';
 import { extractText, type SpawnLike } from '../image/ocr.ts';
 import { resolveTarget } from '../control/providers.ts';
 
@@ -78,7 +79,13 @@ export function applyRoute(
 
   if (category === 'image') {
     const route = routes.image ?? {};
-    const mode = route.mode ?? 'ocr';
+    let mode = route.mode ?? 'auto';
+    // auto: text mentions OCR -> extract locally (free); otherwise it is real
+    // image analysis -> route to a vision model if one is configured, else let
+    // the flagship handle it (passthrough).
+    if (mode === 'auto') {
+      mode = hasOcrKeyword(body) ? 'ocr' : route.model ? 'vision-route' : 'off';
+    }
     let outBody = body;
     let upstream: Upstream | undefined;
 

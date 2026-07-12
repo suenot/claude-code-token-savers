@@ -88,3 +88,23 @@ test('applyRoute image off: passthrough', () => {
   assert.equal(body.messages[0].content.length, 1);
   assert.equal(body.messages[0].content[0].type, 'image');
 });
+
+test('applyRoute image auto: text mentions OCR -> local extraction', () => {
+  const req = { model: 'claude-opus-4-8', messages: [{ role: 'user', content: [{ type: 'text', text: 'do OCR on this' }, imgBlock] }] };
+  const { stats } = applyRoute(req, 'image', { image: { mode: 'auto' } }, { spawnImpl: fakeSpawn });
+  assert.equal(stats.ocrImages, 1);
+});
+
+test('applyRoute image auto: no OCR keyword + vision model -> route to it', () => {
+  const req = { model: 'claude-opus-4-8', messages: [{ role: 'user', content: [{ type: 'text', text: 'what is in this picture?' }, imgBlock] }] };
+  const { body, stats } = applyRoute(req, 'image', { image: { mode: 'auto', model: 'a8e/a8e-1.0-pro' } }, { spawnImpl: fakeSpawn });
+  assert.equal(stats.ocrImages, 0);
+  assert.equal(body.model, 'a8e/a8e-1.0-pro');
+});
+
+test('applyRoute image auto: no OCR keyword + no vision model -> passthrough', () => {
+  const req = { model: 'claude-opus-4-8', messages: [{ role: 'user', content: [{ type: 'text', text: 'describe it' }, imgBlock] }] };
+  const { body, stats } = applyRoute(req, 'image', { image: { mode: 'auto' } }, { spawnImpl: fakeSpawn });
+  assert.equal(stats.ocrImages, 0);
+  assert.equal(body.model, 'claude-opus-4-8');
+});

@@ -52,7 +52,7 @@ export type Config = {
       webSearch?: { model?: string; baseUrl?: string; envKey?: string };
       image?: {
         model?: string; baseUrl?: string; envKey?: string;
-        mode?: 'ocr' | 'vision-route' | 'off'; dropImage?: boolean; ocrCommand?: string; ocrLang?: string;
+        mode?: 'auto' | 'ocr' | 'vision-route' | 'off'; dropImage?: boolean; ocrCommand?: string; ocrLang?: string;
       };
     };
   };

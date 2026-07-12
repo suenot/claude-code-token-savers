@@ -109,7 +109,7 @@ const ROUTE_SECTIONS: SectionSpec[] = [
   { title: 'route: webSearch', fields: routeFields('webSearch') },
   {
     title: 'route: image / vision',
-    note: 'target defaults to a8e/minimax-m3 (MiniMax M3 via a8e). mode: auto = if the text says "ocr" extract text locally (free), else send to the vision model (target above); ocr = always local tesseract; vision-route = always the vision model; off = passthrough.',
+    note: 'target defaults to a8e/a8e-1.0-flash (MiniMax via a8e). mode: auto = if the text says "ocr" extract text locally (free), else send to the vision model (target above); ocr = always local tesseract; vision-route = always the vision model; off = passthrough.',
     fields: routeFields('image', [
       { path: 'modelRouter.routes.image.mode', label: 'mode', type: 'select', options: ['auto', 'ocr', 'vision-route', 'off'] },
       { path: 'modelRouter.routes.image.dropImage', label: 'dropImage (after OCR)', type: 'bool' },

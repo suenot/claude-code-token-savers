@@ -10,7 +10,8 @@ import { extractText, type SpawnLike } from '../image/ocr.ts';
 import { resolveTarget } from '../control/providers.ts';
 
 const PX_PER_TOKEN = 750;
-const DEFAULT_VISION_TARGET = 'a8e/minimax-m3';
+// a8e exposes MiniMax as a8e-1.0-flash (upstream minimaxai/minimax-m2.7).
+const DEFAULT_VISION_TARGET = 'a8e/a8e-1.0-flash';
 
 const FORMATS = new Set(['image/png', 'image/jpeg', 'image/webp']);
 

@@ -36,6 +36,7 @@ export type SavingsSummary = {
   totalSaved: number;
   requests: number; // entries carrying token telemetry
   byStage: Record<string, { in: number; out: number; saved: number; requests: number }>;
+  byModel: Record<string, { in: number; out: number; saved: number; requests: number }>;
 };
 
 const DEFAULT_MAX_APPEND_BYTES = 5_000_000;
@@ -142,10 +143,10 @@ export function readReqLog(opts?: { path?: string; limit?: number; maxBytes?: nu
 // readReqLog (bounded tail read) so this stays cheap and, like everything here,
 // never throws — a telemetry read must never break the console.
 export function readSavings(opts?: { path?: string; limit?: number; maxBytes?: number }): SavingsSummary {
-  const empty: SavingsSummary = { totalIn: 0, totalOut: 0, totalSaved: 0, requests: 0, byStage: {} };
+  const empty: SavingsSummary = { totalIn: 0, totalOut: 0, totalSaved: 0, requests: 0, byStage: {}, byModel: {} };
   try {
     const entries = readReqLog({ ...opts, limit: opts?.limit ?? 5000 });
-    const summary: SavingsSummary = { totalIn: 0, totalOut: 0, totalSaved: 0, requests: 0, byStage: {} };
+    const summary: SavingsSummary = { totalIn: 0, totalOut: 0, totalSaved: 0, requests: 0, byStage: {}, byModel: {} };
     for (const e of entries) {
       if (typeof e.tokensIn !== 'number' && typeof e.tokensOut !== 'number' && typeof e.tokensSaved !== 'number') {
         continue;
@@ -164,6 +165,14 @@ export function readSavings(opts?: { path?: string; limit?: number; maxBytes?: n
       bucket.saved += saved;
       bucket.requests += 1;
       summary.byStage[stage] = bucket;
+
+      const model = e.model || 'unknown';
+      const mbucket = summary.byModel[model] ?? { in: 0, out: 0, saved: 0, requests: 0 };
+      mbucket.in += tin;
+      mbucket.out += tout;
+      mbucket.saved += saved;
+      mbucket.requests += 1;
+      summary.byModel[model] = mbucket;
     }
     return summary;
   } catch {

@@ -1,7 +1,8 @@
 # image-shrink stage — design
 
 **Date:** 2026-07-12
-**Status:** approved (iteration 1 = downscale only)
+**Status:** implemented (iteration 1 = downscale only). E2E verified: 600×600 PNG
+forwarded through the stage as 300×300, request 8059→2843 bytes.
 
 ## Goal
 

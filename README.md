@@ -42,6 +42,7 @@ Tools: **shuba** (Bun/TS) · [cmdop-claude](https://github.com/markolofsen/cmdop
 |---|:-:|:-:|:-:|:-:|:-:|:-:|:-:|
 | Content-aware compression (JSON/code/prose) | ~ | · | · | · | · | ✓ | · |
 | Image/PNG request packing | ~ | · | · | · | · | · | ✓ |
+| Downscale request images (native, scale presets, default 1/2) | ✓ | · | · | · | · | · | · |
 | In-request dedup (identical blocks) | ✓ | · | · | · | · | · | · |
 | `/compact` routed to a cheap model | ✓ | · | · | · | · | · | · |
 | Auto-compact at a token threshold (default 300k) | ✓ | · | · | · | · | · | · |

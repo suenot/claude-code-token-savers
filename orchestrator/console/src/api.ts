@@ -65,6 +65,7 @@ export type Savings = {
   totalSaved: number;
   requests: number;
   byStage: Record<string, { in: number; out: number; saved: number; requests: number }>;
+  byModel: Record<string, { in: number; out: number; saved: number; requests: number }>;
 };
 
 // getSavings fetches aggregated token-savings telemetry (GET /api/savings).

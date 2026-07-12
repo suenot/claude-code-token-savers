@@ -40,6 +40,7 @@ export type Config = {
     thresholdTokens?: number; tailTurns?: number;
   };
   rateLimiter?: { rps?: number; burst?: number; cooldownMs?: number };
+  imageShrink?: { scale?: number | string; minBytes?: number };
   delegate?: DelegateConfig;
   control?: { enabled?: boolean };
   graph?: { model?: string; autobuild?: boolean; noMedia?: boolean; enabled?: boolean };

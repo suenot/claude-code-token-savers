@@ -39,6 +39,11 @@ const SECTIONS: Section[] = [
         cells: { pxpipe: 'yes', shuba: 'partial' },
       },
       {
+        feature: 'Downscale request images (native, scale presets)',
+        hint: 'image-shrink stage resizes base64 images in the request (default 1/2) — token cost drops ~75%',
+        cells: { shuba: 'yes' },
+      },
+      {
         feature: 'In-request dedup',
         hint: 'drop identical content blocks Claude Code resends each turn',
         cells: { shuba: 'yes' },

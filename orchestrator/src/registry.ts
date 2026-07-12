@@ -5,6 +5,7 @@ const COMPACT_BIN = fileURLToPath(new URL('../bin/compact-interceptor.ts', impor
 const WATCHDOG_BIN = fileURLToPath(new URL('../bin/context-watchdog.ts', import.meta.url));
 const RATELIMIT_BIN = fileURLToPath(new URL('../bin/rate-limiter.ts', import.meta.url));
 const DEDUP_BIN = fileURLToPath(new URL('../bin/dedup.ts', import.meta.url));
+const IMAGE_BIN = fileURLToPath(new URL('../bin/shuba-image-shrink.ts', import.meta.url));
 const CONTROL_BIN = fileURLToPath(new URL('../bin/shuba-control.ts', import.meta.url));
 
 export const REGISTRY: Record<string, StageDescriptor> = {
@@ -119,6 +120,25 @@ export const REGISTRY: Record<string, StageDescriptor> = {
           DEDUP_UPSTREAM: upstreamBase as string,
         },
       };
+    },
+  },
+  'image-shrink': {
+    id: 'image-shrink',
+    builtin: true,
+    bin: process.execPath,
+    defaultPort: 47853,
+    dialect: 'anthropic',
+    terminal: false,
+    healthPath: '/health',
+    build({ port, upstreamBase, config }: BuildContext): BuildResult {
+      const c = (config && config.imageShrink) || {};
+      const env: Record<string, string> = {
+        PORT: String(port),
+        IMAGE_UPSTREAM: upstreamBase as string,
+        IMAGE_SCALE: String(c.scale ?? '1/2'),
+      };
+      if (c.minBytes !== undefined) env.IMAGE_MIN_BYTES = String(c.minBytes);
+      return { args: [IMAGE_BIN], env };
     },
   },
   control: {

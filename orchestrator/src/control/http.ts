@@ -106,9 +106,9 @@ function isLoopbackOrigin(origin: string): boolean {
 // the next proxied request — no restart needed. headroom is a third-party
 // stage wired into the process tree at startup, so flipping its toggle only
 // takes effect after a restart.
-const KNOWN_STAGES = ['compact-router', 'context-watchdog', 'dedup', 'headroom', 'rate-limiter'] as const;
+const KNOWN_STAGES = ['compact-router', 'context-watchdog', 'dedup', 'headroom', 'image-shrink', 'rate-limiter'] as const;
 type KnownStage = (typeof KNOWN_STAGES)[number];
-const LIVE_STAGES = new Set<string>(['compact-router', 'context-watchdog', 'dedup', 'rate-limiter']);
+const LIVE_STAGES = new Set<string>(['compact-router', 'context-watchdog', 'dedup', 'image-shrink', 'rate-limiter']);
 
 function isKnownStage(value: unknown): value is KnownStage {
   return typeof value === 'string' && (KNOWN_STAGES as readonly string[]).includes(value);

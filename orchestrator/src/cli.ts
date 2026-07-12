@@ -71,7 +71,12 @@ async function doRun(argv: string[]): Promise<number> {
   }
   const handle: ChainHandle = await up(result.chain, { sidecars: result.sidecars });
   try {
-    registerMcp(mcpConfigPath(), { command: 'bun', args: [CONTROL_BIN] });
+    // In the compiled binary CONTROL_BIN is a virtual /$bunfs/ path that only
+    // this executable can resolve (bin/shuba.ts dispatches it to the embedded
+    // module) — registering `bun <bunfs-path>` would write a broken entry.
+    // Register the running executable itself as the command instead; in dev
+    // process.execPath IS bun, so the entry stays `bun <real-path>` as before.
+    registerMcp(mcpConfigPath(), { command: process.execPath, args: [CONTROL_BIN] });
   } catch (err) {
     console.error('shuba: warning: failed to register shuba-control MCP server:', (err as Error).message);
   }

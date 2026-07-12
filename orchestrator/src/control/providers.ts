@@ -16,7 +16,10 @@ export type ProviderInfo = { baseUrl: string; envKey: string; bodyModel: (t: Tar
 const dropProvider = (t: Target) => t.modelPath.split('/').slice(1).join('/') || t.model;
 
 export const PROVIDERS: Record<string, ProviderInfo> = {
-  // Local link-assistant/router — routes by the full provider/model path.
+  // Local a8e router — our own project (sdvg/a8e-io/router, docker on :8080;
+  // docs: ~/projects/server/llm/README.md), NOT link-assistant/router. Routes
+  // by the full provider/model path; a8e/auto = sequential fallback chain
+  // (kimi → minimax → grok-4.5 → openrouter/deepseek) with 429/402 jail.
   a8e: { baseUrl: 'http://localhost:8080/v1', envKey: 'A8E_API_KEY', bodyModel: (t) => t.modelPath },
   // OpenRouter — drop the leading `openrouter/`, keep subprovider/model.
   openrouter: { baseUrl: 'https://openrouter.ai/api/v1', envKey: 'OPENROUTER_API_KEY', bodyModel: dropProvider },

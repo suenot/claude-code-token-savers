@@ -83,9 +83,19 @@ cd orchestrator && npm link
 ```
 
 This installs the `shuba` command (still distributed as an npm package, but
-executed by Bun). With `npm link` the global `shuba` is a symlink into this
-repo running `bin/shuba.ts` from source — every `git pull`/local change is
-live on the next launch, no rebuild or copy step. The external proxies shuba wraps are installed separately —
+executed by Bun).
+
+For a **fixed-build** global install (recommended — the global command runs a
+pinned compiled binary, not whatever the working tree currently holds):
+
+```bash
+cd orchestrator
+bun run build                       # compiles ./shuba (single-file executable)
+ln -sf "$PWD/shuba" <dir-on-PATH>/shuba
+```
+
+Updating is explicit: `git pull && bun run build` — until you rebuild, the
+global `shuba` keeps running the previous build. The external proxies shuba wraps are installed separately —
 shuba does not vendor or auto-install them:
 
 ```bash

@@ -6,6 +6,7 @@ const WATCHDOG_BIN = fileURLToPath(new URL('../bin/context-watchdog.ts', import.
 const RATELIMIT_BIN = fileURLToPath(new URL('../bin/rate-limiter.ts', import.meta.url));
 const DEDUP_BIN = fileURLToPath(new URL('../bin/dedup.ts', import.meta.url));
 const IMAGE_BIN = fileURLToPath(new URL('../bin/shuba-image-shrink.ts', import.meta.url));
+const ROUTER_BIN = fileURLToPath(new URL('../bin/shuba-model-router.ts', import.meta.url));
 const CONTROL_BIN = fileURLToPath(new URL('../bin/shuba-control.ts', import.meta.url));
 
 export const REGISTRY: Record<string, StageDescriptor> = {
@@ -139,6 +140,26 @@ export const REGISTRY: Record<string, StageDescriptor> = {
       };
       if (c.minBytes !== undefined) env.IMAGE_MIN_BYTES = String(c.minBytes);
       return { args: [IMAGE_BIN], env };
+    },
+  },
+  'model-router': {
+    id: 'model-router',
+    builtin: true,
+    bin: process.execPath,
+    defaultPort: 47854,
+    dialect: 'anthropic',
+    terminal: false,
+    healthPath: '/health',
+    build({ port, upstreamBase, config }: BuildContext): BuildResult {
+      const routes = (config && config.modelRouter && config.modelRouter.routes) || {};
+      return {
+        args: [ROUTER_BIN],
+        env: {
+          PORT: String(port),
+          ROUTER_UPSTREAM: upstreamBase as string,
+          ROUTER_ROUTES: JSON.stringify(routes),
+        },
+      };
     },
   },
   control: {

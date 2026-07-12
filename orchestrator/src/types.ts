@@ -41,6 +41,19 @@ export type Config = {
   };
   rateLimiter?: { rps?: number; burst?: number; cooldownMs?: number };
   imageShrink?: { scale?: number | string; minBytes?: number };
+  modelRouter?: {
+    routes?: {
+      default?: { model?: string; baseUrl?: string; envKey?: string };
+      background?: { model?: string; baseUrl?: string; envKey?: string };
+      think?: { model?: string; baseUrl?: string; envKey?: string };
+      longContext?: { model?: string; baseUrl?: string; envKey?: string; threshold?: number };
+      webSearch?: { model?: string; baseUrl?: string; envKey?: string };
+      image?: {
+        model?: string; baseUrl?: string; envKey?: string;
+        mode?: 'ocr' | 'vision-route' | 'off'; dropImage?: boolean; ocrCommand?: string; ocrLang?: string;
+      };
+    };
+  };
   delegate?: DelegateConfig;
   control?: { enabled?: boolean };
   graph?: { model?: string; autobuild?: boolean; noMedia?: boolean; enabled?: boolean };

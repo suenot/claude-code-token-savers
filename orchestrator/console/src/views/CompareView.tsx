@@ -72,7 +72,7 @@ const SECTIONS: Section[] = [
       {
         feature: 'Provider / model routing',
         hint: 'translate to another provider or route by rule',
-        cells: { shuba: 'partial', ccr: 'yes', litellm: 'yes' },
+        cells: { shuba: 'yes', ccr: 'yes', litellm: 'yes' },
       },
       {
         feature: "Cheap model for the tool's own work (off Claude's budget)",
@@ -123,6 +123,43 @@ const SECTIONS: Section[] = [
         feature: 'God nodes / community detection',
         hint: 'most-connected entities, graph clustering',
         cells: { graphify: 'yes', shuba: 'partial' },
+      },
+    ],
+  },
+  {
+    title: 'Task-type model routing (configurable model per request category)',
+    rows: [
+      {
+        feature: 'default route (main model)',
+        cells: { shuba: 'yes', ccr: 'yes', litellm: 'partial' },
+      },
+      {
+        feature: 'background route (small/cheap for Claude Code bg calls)',
+        hint: 'detected by a haiku-tier incoming model',
+        cells: { shuba: 'yes', ccr: 'yes' },
+      },
+      {
+        feature: 'think route (plan/reasoning model)',
+        hint: 'detected by the thinking param',
+        cells: { shuba: 'yes', ccr: 'yes' },
+      },
+      {
+        feature: 'longContext route (over a token threshold)',
+        hint: 'default 60k; shuba also has context-watchdog for in-place compaction',
+        cells: { shuba: 'yes', ccr: 'yes' },
+      },
+      {
+        feature: 'webSearch route (requests using web_search)',
+        cells: { shuba: 'yes', ccr: 'yes' },
+      },
+      {
+        feature: 'image/vision route (cheap vision model for image requests)',
+        cells: { shuba: 'yes', ccr: 'yes' },
+      },
+      {
+        feature: 'Local OCR for image requests (no vision LLM)',
+        hint: 'tesseract extracts text from screenshots; optionally drop the pixels — unique to shuba',
+        cells: { shuba: 'yes' },
       },
     ],
   },

@@ -49,7 +49,7 @@ Tools: **shuba** (Bun/TS) · [cmdop-claude](https://github.com/markolofsen/cmdop
 | Response / compression cache | ✓ | · | · | · | ✓ | · | · |
 | Rate limiting | ✓ | · | · | · | ✓ | · | · |
 | Chain proxies behind one `BASE_URL` | ✓ | · | · | · | · | · | · |
-| Provider / model routing | ~ | · | · | ✓ | ✓ | · | · |
+| Provider / model routing | ✓ | · | · | ✓ | ✓ | · | · |
 | Cheap model for the tool's own work (off Claude's budget) | ✓ | ✓ | ✓ | ~ | ~ | · | · |
 
 **Project intelligence / sidecar** — cmdop-claude's core idea: spend cents on a cheap model to keep docs/maps accurate so Claude Code's scarce context isn't spent on it:
@@ -64,6 +64,20 @@ Tools: **shuba** (Bun/TS) · [cmdop-claude](https://github.com/markolofsen/cmdop
 | Docs search (FTS5 / semantic) | · | ✓ | · | · | · | · | · |
 | Knowledge graph (query instead of read) | ✓ | · | ✓ | · | · | · | · |
 | God nodes / community detection | ~ | · | ✓ | · | · | · | · |
+
+**Task-type model routing** — the claude-code-router / hermes pattern, native in shuba's `model-router` stage: classify each request and pick a model per category (all configurable under `modelRouter.routes`):
+
+| route | detected when | shuba | cmdop | graphify | ccr | litellm | headroom | pxpipe |
+|---|---|:-:|:-:|:-:|:-:|:-:|:-:|:-:|
+| `default` | anything else | ✓ | · | · | ✓ | ~ | · | · |
+| `background` | haiku-tier bg calls | ✓ | · | · | ✓ | · | · | · |
+| `think` | thinking/plan mode | ✓ | · | · | ✓ | · | · | · |
+| `longContext` | tokens > threshold (60k) | ✓ | · | · | ✓ | · | · | · |
+| `webSearch` | web_search tool present | ✓ | · | · | ✓ | · | · | · |
+| `image`/vision | request has images | ✓ | · | · | ✓ | · | · | · |
+| **Local OCR** for image reqs (no vision LLM) | request has images | ✓ | · | · | · | · | · | · |
+
+shuba already covered `compact` (compact-router) and `longContext` in-place compaction (context-watchdog); `model-router` adds the rest. The **Local OCR** row is unique: tesseract extracts text from screenshots (code/errors/logs) locally, injected as a text block — optionally dropping the pixels — so most "image analysis" never needs a vision model at all.
 
 **Task delegation / routing** — offload whole tasks off Claude Code onto cheaper harnesses/models:
 

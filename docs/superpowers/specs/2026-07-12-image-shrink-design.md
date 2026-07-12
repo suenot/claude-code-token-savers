@@ -110,3 +110,103 @@ existing per-stage bars.
 ## Dependency
 
 Add `sharp` (native libvips) to `orchestrator/package.json`.
+
+---
+
+# Iteration 2 — model-router stage (full task-type routing + OCR)
+
+**Status:** implemented + verified. E2E: background route rewrote
+`claude-haiku-4-5 → deepseek/cheap` through the proxy; real tesseract via
+`extractText` read "HELLO OCR 42" off a rendered PNG. 10 unit tests pass.
+
+## Motivation
+
+Most "image analysis" in coding is really text extraction (screenshots of
+code/errors/logs). OCR does not need an LLM — a local engine is cheaper and
+more accurate for that. Only genuinely visual tasks (diagrams, UI, colour) need
+a vision model. This is one route in the broader task-type routing taxonomy that
+harnesses like claude-code-router expose (`default` / `background` / `think` /
+`longContext` / `webSearch` / `image`). shuba already covers `compact`
+(compact-router) and `longContext` (context-watchdog) with dedicated stages;
+iteration 2 adds the `image` route.
+
+## Stage `model-router` (full task-type routing)
+
+One built-in stage (`defaultPort: 47854`, toggleable) that classifies every
+`/v1/messages` request into a task category and rewrites `body.model` (and,
+optionally, the upstream endpoint) per a configured route map — the
+claude-code-router / hermes pattern, native in shuba. `image-shrink` stays a
+separate stage (pixel downscale) and composes ahead of it.
+
+**Categories + detection (first configured match wins, in this precedence):**
+
+| route | detected when | default model |
+|---|---|---|
+| `longContext` | `estimateTokens(body) > threshold` (default 60k) | (unset) |
+| `image` | any message has a base64 `image` block | (see below) |
+| `think` | `body.thinking` enabled | (unset) |
+| `webSearch` | a `web_search` tool present | (unset) |
+| `background` | `body.model` matches `/haiku/i` (Claude Code's small calls) | (unset) |
+| `default` | none of the above | (unset) |
+
+A category is only chosen if its route is configured (an unconfigured category
+never shadows a lower one). Each route: `{ model?, baseUrl?, envKey? }`;
+`longContext` also carries `threshold`. `model` set → rewrite `body.model`;
+`baseUrl`+`envKey` set → also forward that one request to a different
+Anthropic-messages endpoint. All routes empty ⇒ the stage is a passthrough.
+
+**`image` route** additionally handles pixels via `mode`:
+
+- **`ocr`** (default): run local OCR (tesseract) on each base64 image; inject a
+  text block `[shuba-ocr]\n<text>` immediately before the image block. Keep the
+  image by default (`dropImage: false` — nothing lost, helps accuracy); set
+  `dropImage: true` to remove the pixels after extraction for max savings
+  (lossy — drops visual info). Token savings reported only when `dropImage`.
+- **`vision-route`**: for image-containing requests, rewrite `body.model` to
+  `visionModel` (default `claude-haiku-4-5`) — the hermes `image` route. Optional
+  `visionBaseUrl` + `visionEnvKey` send it to a different Anthropic-messages
+  endpoint; by default it stays on the same upstream, just a cheaper model.
+- **`off`**: passthrough.
+
+Image-route defaults: `mode='ocr'`, `dropImage=false`, `ocrCommand='tesseract'`,
+`ocrLang='eng'`. In `vision-route`, `image.model` (default `claude-haiku-4-5`)
+is the model image requests are sent to.
+
+## Config
+
+```
+Config.modelRouter?: {
+  routes?: {
+    default?:     { model?; baseUrl?; envKey? };
+    background?:  { model?; baseUrl?; envKey? };
+    think?:       { model?; baseUrl?; envKey? };
+    longContext?: { model?; baseUrl?; envKey?; threshold? };
+    webSearch?:   { model?; baseUrl?; envKey? };
+    image?:       { model?; baseUrl?; envKey?;
+                    mode?: 'ocr'|'vision-route'|'off'; dropImage?; ocrCommand?; ocrLang? };
+  }
+}
+```
+
+The whole `routes` object is passed to the bin as one JSON env var
+(`ROUTER_ROUTES`) — nested config does not fit discrete envs.
+
+## Components
+
+- `src/router/classify.ts` — `classifyRequest(body, routes)`: pure; returns the
+  winning category by precedence, skipping unconfigured categories.
+- `src/image/ocr.ts` — `extractText(buffer, {ocrCommand, ocrLang, spawnImpl})`:
+  writes the image to a temp file, runs `<ocrCommand> <file> stdout -l <lang>`,
+  returns trimmed text (empty on any failure — never throws).
+- `src/router/apply.ts` — `applyRoute(body, category, routes)`: model rewrite,
+  or image OCR-inject; returns `{ body, routedModel?, upstream?, stats }`.
+- `src/router/server.ts` — proxy; honours a per-route upstream/auth override.
+- `bin/shuba-model-router.ts`, registry entry, `KNOWN_STAGES`/`LIVE_STAGES`.
+
+## Testing
+
+`test/model-router.test.ts`: classify precedence (longContext > image > think >
+webSearch > background > default; unconfigured skipped); model rewrite per
+category; image OCR injection with a stubbed `spawnImpl` (no real tesseract in
+CI); `dropImage` removes the image block; `vision-route` rewrites model on image
+requests; `off` / all-empty passthrough.

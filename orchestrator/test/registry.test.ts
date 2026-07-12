@@ -30,19 +30,19 @@ test('compact-router is a builtin node stage wired from config', () => {
   assert.equal(d.bin, process.execPath);
   const { args, env } = d.build({
     port: 47850, upstreamBase: 'http://127.0.0.1:8787',
-    config: { compactRouter: { model: 'a8e/a8e-1.0-pro' } } as Config,
+    config: { compactRouter: { model: 'a8e/auto' } } as Config,
   });
   assert.match(args[0], /bin\/compact-interceptor\.ts$/);
   assert.equal(env.PORT, '47850');
   assert.equal(env.COMPACT_UPSTREAM, 'http://127.0.0.1:8787');
-  assert.equal(env.COMPACT_MODEL, 'a8e/a8e-1.0-pro');
+  assert.equal(env.COMPACT_MODEL, 'a8e/auto');
   assert.equal(env.COMPACT_BASE_URL, 'http://localhost:8080/v1'); // default
   assert.equal(env.COMPACT_ENV_KEY, 'A8E_API_KEY'); // default
 });
 
 test('compact-router applies default model when config omits it', () => {
   const { env } = REGISTRY['compact-router'].build({ port: 1, upstreamBase: 'http://x' });
-  assert.equal(env.COMPACT_MODEL, 'a8e/a8e-1.0-pro');
+  assert.equal(env.COMPACT_MODEL, 'a8e/auto');
 });
 
 test('context-watchdog builtin wires threshold/tail/model from config', () => {
@@ -60,7 +60,7 @@ test('context-watchdog builtin wires threshold/tail/model from config', () => {
   assert.equal(env.WATCHDOG_UPSTREAM, 'http://127.0.0.1:8787');
   assert.equal(env.WATCHDOG_THRESHOLD, '250000');
   assert.equal(env.WATCHDOG_TAIL_TURNS, '8');
-  assert.equal(env.WATCHDOG_MODEL, 'a8e/a8e-1.0-pro'); // default
+  assert.equal(env.WATCHDOG_MODEL, 'a8e/auto'); // default
 });
 
 test('context-watchdog applies defaults when config omits the block', () => {
@@ -120,5 +120,5 @@ test('control descriptor is a builtin node sidecar wired from delegate config', 
 test('control applies a default delegate config when config omits delegate', () => {
   const { env } = REGISTRY.control.build({ port: 47830 });
   const parsed = JSON.parse(env.DELEGATE_JSON);
-  assert.equal(parsed.default, 'opencode/a8e/a8e-1.0-pro');
+  assert.equal(parsed.default, 'opencode/a8e/auto');
 });

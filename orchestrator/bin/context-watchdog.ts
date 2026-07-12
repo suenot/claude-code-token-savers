@@ -3,7 +3,7 @@ import { createWatchdog } from '../src/watchdog/server.ts';
 
 const port = Number(process.env.PORT || 47851);
 const upstream = process.env.WATCHDOG_UPSTREAM || 'https://api.anthropic.com';
-const model = process.env.WATCHDOG_MODEL || 'a8e/a8e-1.0-pro';
+const model = process.env.WATCHDOG_MODEL || 'a8e/auto';
 const baseUrl = process.env.WATCHDOG_BASE_URL || 'http://localhost:8080/v1';
 const envKey = process.env.WATCHDOG_ENV_KEY || 'A8E_API_KEY';
 const thresholdTokens = Number(process.env.WATCHDOG_THRESHOLD || 300000);

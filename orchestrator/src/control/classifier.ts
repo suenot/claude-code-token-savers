@@ -28,9 +28,9 @@ async function classify(
   const fetchImpl = opts.fetchImpl ?? (fetch as unknown as FetchLike);
   // classifierModel is a target string (provider/model); resolve it to the
   // endpoint + model the classifier LLM call should use.
-  const t = resolveTarget(cfg.classifierModel ?? 'a8e/a8e-1.0-pro');
+  const t = resolveTarget(cfg.classifierModel ?? 'a8e/auto');
   const baseUrl = cfg.baseUrl ?? t.baseUrl ?? 'http://localhost:8080/v1';
-  const model = t.model || 'a8e/a8e-1.0-pro';
+  const model = t.model || 'a8e/auto';
 
   const hints = cfg.policy
     .map((p) => `- when: "${p.when}" -> harness: "${p.harness}", model: "${p.model}"`)

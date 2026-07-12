@@ -50,7 +50,7 @@ function chainStages(): ChainStage[] {
 const DEFAULT_CHAIN_STAGES: ChainStage[] = chainStages();
 
 const DEFAULT_CFG: DelegateConfig = {
-  default: 'opencode/a8e/a8e-1.0-pro',
+  default: 'opencode/a8e/auto',
 };
 
 // cfg.default is either a target string (harness/provider/…/model) or the

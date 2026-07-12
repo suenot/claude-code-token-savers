@@ -49,7 +49,7 @@ export const REGISTRY: Record<string, StageDescriptor> = {
     healthPath: '/health',
     build({ port, upstreamBase, config }: BuildContext): BuildResult {
       const c = (config && config.compactRouter) || {};
-      const r = resolveTarget(c.model || 'a8e/a8e-1.0-pro');
+      const r = resolveTarget(c.model || 'a8e/auto');
       return {
         args: [COMPACT_BIN],
         env: {
@@ -94,7 +94,7 @@ export const REGISTRY: Record<string, StageDescriptor> = {
     healthPath: '/health',
     build({ port, upstreamBase, config }: BuildContext): BuildResult {
       const c = (config && config.contextWatchdog) || {};
-      const r = resolveTarget(c.model || 'a8e/a8e-1.0-pro');
+      const r = resolveTarget(c.model || 'a8e/auto');
       return {
         args: [WATCHDOG_BIN],
         env: {
@@ -195,7 +195,7 @@ export const REGISTRY: Record<string, StageDescriptor> = {
     terminal: false,
     healthPath: '/health',
     build({ port, config }: BuildContext): BuildResult {
-      const delegate = config?.delegate ?? { default: 'opencode/a8e/a8e-1.0-pro' };
+      const delegate = config?.delegate ?? { default: 'opencode/a8e/auto' };
       const graph = config?.graph ?? {};
       const compressors = config?.compressors ?? [];
       return {

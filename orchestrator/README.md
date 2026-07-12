@@ -26,6 +26,21 @@ complementary way:
   proactively rewrites any over-threshold request to keep the flagship's
   context small **before** Claude Code's own autocompact kicks in. See
   [below](#context-watchdog) for details.
+- **dedup** — built-in: collapses repeated content blocks across the request.
+- **crush** — built-in: shrinks oversized `tool_result` blocks (ANSI strip,
+  repeated-line collapse, head/tail window) deterministically, so the
+  prompt-cache prefix stays stable. See [below](#crush).
+- **image-shrink** — built-in: downscales images; OCR/vision routing to a
+  cheap model for image-heavy requests.
+- **model-router** — built-in: routes request categories (e.g. background
+  tasks) to cheaper models, and carries the **thinking damper** — per-route
+  strip/cap of the `thinking` budget. See [below](#model-router--thinking-damper).
+- **rate-limiter** — built-in: the terminal stage before Anthropic; also the
+  point where **real usage telemetry** (including prompt-cache reads/writes)
+  is captured. See [below](#prompt-cache-telemetry).
+- **skill-inject** — built-in: with skills taken over from Claude Code (see
+  [Capabilities takeover](#capabilities-takeover)), injects only the few
+  skills relevant to the current conversation. See [below](#skill-inject).
 
 Run bare, only one of them can sit behind `ANTHROPIC_BASE_URL`. **shuba**
 starts the proxies you've enabled, each on its own port, wires each one's
@@ -68,7 +83,9 @@ cd orchestrator && npm link
 ```
 
 This installs the `shuba` command (still distributed as an npm package, but
-executed by Bun). The external proxies shuba wraps are installed separately —
+executed by Bun). With `npm link` the global `shuba` is a symlink into this
+repo running `bin/shuba.ts` from source — every `git pull`/local change is
+live on the next launch, no rebuild or copy step. The external proxies shuba wraps are installed separately —
 shuba does not vendor or auto-install them:
 
 ```bash
@@ -95,10 +112,12 @@ install command for each.
 - **`terminal`** — where the chain ends up talking:
   `anthropic | codex | gemini | qwen | openai-compatible`.
 - **`compressors`** — subset of `["headroom", "compact-router",
-  "context-watchdog", "rate-limiter"]`, in chain order (first entry = closest to Claude Code,
-  i.e. it sees the request first). `compact-router` is recommended **first**
-  — see [below](#compact-router) — and `context-watchdog` should come
-  **after** it — see [below](#context-watchdog).
+  "context-watchdog", "crush", "dedup", "image-shrink", "model-router",
+  "rate-limiter", "skill-inject"]`, in chain order (first entry = closest to
+  Claude Code, i.e. it sees the request first). `compact-router` is
+  recommended **first** — see [below](#compact-router) — and
+  `context-watchdog` should come **after** it — see
+  [below](#context-watchdog).
 - **`compactRouter`** — optional config block for the `compact-router` stage
   (model/baseUrl/envKey); see [below](#compact-router).
 - **`contextWatchdog`** — optional config block for the `context-watchdog`
@@ -154,7 +173,7 @@ efficient one). An optional `compactRouter` block tunes the model:
   "terminal": "anthropic",
   "compressors": ["compact-router", "headroom"],
   "compactRouter": {
-    "model": "a8e/a8e-1.0-pro",
+    "model": "a8e/auto",
     "baseUrl": "http://localhost:8080/v1",
     "envKey": "A8E_API_KEY"
   },
@@ -163,7 +182,9 @@ efficient one). An optional `compactRouter` block tunes the model:
 ```
 
 Defaults (used when `compactRouter` is omitted, or any of its fields are):
-`a8e/a8e-1.0-pro` (white-label for Kimi K2.6) via the local a8e router at
+`a8e/auto` (the a8e router picks a working model itself — individual models
+like Kimi/MiniMax flake; auto is the reliable default) via the local a8e
+router at
 `http://localhost:8080/v1` (see `/Users/suenot/projects/server/llm/README.md`),
 using the `A8E_API_KEY` environment variable if set — the local router runs
 with `A8E_REQUIRE_AUTH=false`, so any non-empty key satisfies it and shuba
@@ -247,22 +268,22 @@ and model:
   "terminal": "anthropic",
   "compressors": ["compact-router", "context-watchdog"],
   "compactRouter": {
-    "model": "a8e/a8e-1.0-pro",
+    "model": "a8e/auto",
     "baseUrl": "http://localhost:8080/v1",
     "envKey": "A8E_API_KEY"
   },
   "contextWatchdog": {
     "thresholdTokens": 300000,
     "tailTurns": 6,
-    "model": "a8e/a8e-1.0-pro"
+    "model": "a8e/auto"
   },
   "ports": {}
 }
 ```
 
 Defaults (used when `contextWatchdog` is omitted, or any of its fields are):
-`thresholdTokens: 300000`, `tailTurns: 6`, model `a8e/a8e-1.0-pro`
-(Kimi K2.6) via the local a8e router at `http://localhost:8080/v1`, using
+`thresholdTokens: 300000`, `tailTurns: 6`, model `a8e/auto`
+(auto-picked model) via the local a8e router at `http://localhost:8080/v1`, using
 the `A8E_API_KEY` environment variable if set (`baseUrl`/`envKey` follow the
 same defaults as compact-router).
 
@@ -283,6 +304,119 @@ breaks, it just runs once at full price. The same passthrough applies when
 the request is under threshold, or when no safe cut of the history exists
 (nothing to compact safely): both cases pass through untouched, no
 rewriting attempted.
+
+## crush
+
+**crush** shrinks oversized `tool_result` blocks (over 2000 chars by default)
+in three deterministic steps: ANSI escape-code strip, collapse of 3+ identical
+consecutive lines, and — if still over budget — a head-60%/tail-25% window
+with a `… [crushed M chars] …` marker, whole lines only.
+
+The transform is **deterministic and idempotent by construction**: the same
+block crushes to byte-identical output on every request, so a tool result
+crushed on turn N serializes identically on turn N+1 and the Anthropic
+prompt-cache prefix keeps hitting. Non-`tool_result` blocks, the system
+prompt, tools, thinking, and images are never touched.
+
+Config: `"crush": { "threshold": 2000, "budget": 2000, "enabled": true }`.
+
+## model-router — thinking damper
+
+Besides routing categories to cheaper models, a route may carry a
+`thinking` control: `'strip'` removes the `thinking` param from the outgoing
+body entirely, `'keep'` opts out, `{ "budget": N }` caps
+`thinking.budget_tokens` at N (never adds thinking where there was none).
+Routes in the `background` category **strip by default**. Savings (the
+removed/reduced budget — an upper bound) log as the `thinking-damper` funnel
+stage.
+
+## Prompt-cache telemetry
+
+The rate-limiter — the terminal stage, the only one that sees real Anthropic
+responses — parses `usage` from both JSON and SSE responses (best-effort,
+never touching the response path) and records `inputTokens`, `outputTokens`,
+`cacheRead` (`cache_read_input_tokens`), `cacheWrite`
+(`cache_creation_input_tokens`) into the request log.
+`GET /api/savings/cache` aggregates them: `totalProcessed = input + cacheRead
++ cacheWrite` (Anthropic's counts are additive — `input_tokens` is the
+*uncached* remainder), `cacheHitRatio = cacheRead / totalProcessed`.
+
+Why it matters: body-rewriting stages (dedup/crush/watchdog) can silently
+break the cache prefix and *cost* tokens — a collapsed `cacheRead` here is
+the tell.
+
+## Capabilities takeover
+
+Claude Code pays a fixed context tax every session — and every subagent
+spawn — for listing all skills (~10k tokens at 114 skills), custom agents
+(~3k at 23), and hook-injected text. shuba can take those capabilities over
+entirely:
+
+- **Scan** finds skills/agents/MCP servers/plugins in `~/.claude` (and the
+  project's `.claude/`, `.mcp.json`).
+- **Import** copies each into `~/.shuba/capabilities` and strips it from
+  Claude Code: skills/agents move to a timestamped backup (never deleted),
+  MCP keys are dropped from the JSON (`.bak` written first), plugins get
+  `enabled:false`.
+- **Verify** answers "is Claude Code clean?" with a leftovers list.
+- **Eject** restores any capability back byte-identically.
+
+Everything is driven from the console's **Capabilities** tab (or
+`/api/capabilities` + `/scan` `/import` `/eject` `/toggle`) — nothing runs
+automatically. Two companion pieces make the empty config usable:
+
+### skill-inject
+
+With skill listings gone from Claude Code's context, the `skill-inject` stage
+puts the relevant few back per conversation: a cheap classifier (`a8e/auto`)
+reads the first user message and picks up to 5 relevant skills from the
+store; the stage appends one ~100-token-per-skill system block (name,
+description, path to `SKILL.md` — Claude reads the file itself when the skill
+applies). The selection is cached by a hash of the first user message, so
+every turn injects a **byte-identical** block and the prompt cache keeps
+hitting. Classifier failure fails open: no injection, request untouched.
+In the funnel this stage honestly shows *negative* savings — its payoff is
+the shrunken Claude Code context, not this hop.
+
+Config: `"skillInject": { "enabled": true, "maxSkills": 5,
+"classifierModel": "a8e/auto" }`.
+
+### MCP gateway
+
+Imported MCP servers stay reachable through the single remaining connection
+(shuba-control): the gateway lazily spawns each server on first use (stdio
+JSON-RPC), respawns on crash, and proxies via two MCP tools —
+`shuba_gateway_list` (servers, or one server's tools) and
+`shuba_gateway_call` (invoke a tool). Every call is timeout-bounded and
+returns a clean `{ error }` instead of hanging.
+
+## Delegation & the eval loop
+
+`shuba-control` can delegate tasks to other harnesses (opencode/gemini/qwen…)
+in isolated git worktrees, and — following the
+[Meta-Harness](https://superagenticai.github.io/metaharness/) idea that the
+harness, not the prompt, is the optimization surface — judge what came back:
+
+- **Outcome taxonomy** — every finished job gets a verdict orthogonal to
+  done/failed: `keep | discard | crash | no-change | scope-violation`
+  (`timeout` reserved).
+- **Write-scope gate** — a job may declare allowed path globs; a clean run
+  that touched anything outside them is flagged `scope-violation`.
+- **Deterministic validate** — a job may carry a validate command (tests/
+  lint) run in the worktree after the scope gate; nonzero exit downgrades
+  `keep` → `discard`. A zero-token quality gate: a bad candidate diff never
+  reaches Claude's context.
+- **Env snapshot** — compact pre-run state (HEAD sha, dirty flag, tracked
+  file count) recorded per job for audit/repro.
+- **Experiment runner** — run N candidate jobs for one task across different
+  harness/model variants (worktree-forced, shared scope+validate), then keep
+  the best deterministically: only `keep` outcomes qualify, smallest diff
+  wins, ties go to the earliest finish. Exposed as MCP tools
+  (`shuba_experiment_run` / `shuba_experiment_status`) and
+  `GET /api/experiments[/:id]`.
+
+The economics: candidates burn tokens only on free backends (the local a8e
+router is effectively free); Claude receives exactly one winning diff.
 
 ## Commands
 
@@ -318,7 +452,11 @@ shuba down                     # guidance only (see below)
 `shuba-control` (the sidecar `shuba run`/`up` starts alongside the chain when
 `control.enabled` isn't `false`) doubles as a small HTTP server for a
 browser-based management console — chain/health status, delegated-job logs,
-the graph view, config (secrets redacted), and token-savings stats.
+the graph view, config (secrets redacted), token-savings stats, the
+**Funnel** tab (an ECharts funnel of where tokens are saved, stage by stage,
+from the request log), and the **Capabilities** tab (take over / eject /
+toggle Claude Code's skills, agents, MCP servers, and plugins — see
+[Capabilities takeover](#capabilities-takeover)).
 
 The console is a static React SPA (`orchestrator/console`) that the control
 server serves from `console/dist`. It is **not** committed — build it once

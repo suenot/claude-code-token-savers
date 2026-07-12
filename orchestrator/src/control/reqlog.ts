@@ -180,6 +180,119 @@ export function readSavings(opts?: { path?: string; limit?: number; maxBytes?: n
   }
 }
 
+// Canonical top→bottom order for the savings funnel. Stages the request log
+// hasn't seen are simply skipped; any stage id present in the log but missing
+// here is appended (sorted) after these, so a newly-added stage still shows up.
+export const FUNNEL_STAGE_ORDER = [
+  'compact-router',
+  'context-watchdog',
+  'dedup',
+  'image-shrink',
+  'model-router',
+  'rate-limiter',
+] as const;
+
+export type FunnelStage = {
+  name: string; // display label (stage id for real stages, or a synthetic label)
+  stage?: string; // stage id — present only for real per-stage slices
+  kind: 'baseline' | 'stage' | 'sent';
+  remaining: number; // tokens still in flight at this level = the funnel slice's value
+  saved: number; // tokens removed getting from the previous level to this one (0 at baseline)
+  pctOfBaseline: number; // remaining / baseline * 100
+  pctOfPrev: number; // remaining / previous.remaining * 100 (100 at baseline)
+  terminal?: boolean; // the bottom slice = what actually left towards the API
+};
+
+export type SavingsFunnel = {
+  baseline: number; // totalIn — tokens that would have been sent with no savings layer
+  sent: number; // totalOut — tokens actually forwarded upstream
+  totalSaved: number; // baseline - sent
+  savedPct: number; // totalSaved / baseline * 100
+  requests: number; // entries carrying token telemetry
+  // Ordered top→bottom. stages[0] is always the baseline; the last entry is
+  // flagged `terminal` and its `remaining` equals `sent`.
+  stages: FunnelStage[];
+};
+
+// readSavingsFunnel turns the flat per-stage savings summary into an ordered,
+// arithmetically-closed funnel: baseline (would-be-sent) at the top, one slice
+// per savings stage that actually removed tokens, and a terminal slice equal to
+// what was really sent. Each stage's `saved` narrows the funnel by exactly that
+// much, so the slices always add back up to the baseline. Never throws.
+//
+// Caveat worth knowing when reading the numbers: stages log independently per
+// hop, so a request passing through N stages contributes to N `tokensIn`/
+// `tokensOut` records. The per-stage *saved* amounts stay correct and additive,
+// but the absolute baseline/sent totals are inflated by intermediate hops being
+// counted as both an upstream stage's "out" and the next stage's "in".
+export function readSavingsFunnel(opts?: { path?: string; limit?: number; maxBytes?: number }): SavingsFunnel {
+  const empty: SavingsFunnel = { baseline: 0, sent: 0, totalSaved: 0, savedPct: 0, requests: 0, stages: [] };
+  try {
+    const s = readSavings(opts);
+    const baseline = s.totalIn;
+    const sent = s.totalOut;
+    if (baseline <= 0) return { ...empty, requests: s.requests };
+
+    const stages: FunnelStage[] = [
+      { name: 'Would-be-sent', kind: 'baseline', remaining: baseline, saved: 0, pctOfBaseline: 100, pctOfPrev: 100 },
+    ];
+
+    const known = FUNNEL_STAGE_ORDER as readonly string[];
+    const present = Object.keys(s.byStage);
+    const ordered = [
+      ...known.filter((id) => present.includes(id)),
+      ...present.filter((id) => !known.includes(id)).sort(),
+    ];
+
+    let running = baseline;
+    for (const id of ordered) {
+      const bucket = s.byStage[id];
+      // Only stages that actually removed tokens narrow the funnel; a stage that
+      // merely forwarded (saved <= 0) would add a same-width slice and read as noise.
+      if (!bucket || bucket.saved <= 0) continue;
+      const prev = running;
+      running -= bucket.saved;
+      stages.push({
+        name: id,
+        stage: id,
+        kind: 'stage',
+        remaining: running,
+        saved: bucket.saved,
+        pctOfBaseline: (running / baseline) * 100,
+        pctOfPrev: prev > 0 ? (running / prev) * 100 : 100,
+      });
+    }
+
+    // Close the funnel at what really went out. When the stages above account
+    // for every saved token, `running` already equals `sent` and no extra slice
+    // is needed — we just flag the last stage as terminal. Otherwise (savings
+    // not fully attributable to a stage) add an explicit terminal slice.
+    if (Math.round(running) !== Math.round(sent)) {
+      const prev = running;
+      stages.push({
+        name: 'Actually sent',
+        kind: 'sent',
+        remaining: sent,
+        saved: prev - sent,
+        pctOfBaseline: (sent / baseline) * 100,
+        pctOfPrev: prev > 0 ? (sent / prev) * 100 : 100,
+      });
+    }
+    stages[stages.length - 1]!.terminal = true;
+
+    return {
+      baseline,
+      sent,
+      totalSaved: baseline - sent,
+      savedPct: (s.totalSaved / baseline) * 100,
+      requests: s.requests,
+      stages,
+    };
+  } catch {
+    return empty;
+  }
+}
+
 export function summarizeBody(rawBody: Buffer): { model?: string; maxTokens?: number; bodySha: string; preview?: string } {
   const bodySha = createHash('sha256').update(rawBody).digest('hex').slice(0, 8);
   try {

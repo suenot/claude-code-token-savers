@@ -73,6 +73,32 @@ export function getSavings(): Promise<Savings> {
   return getJson<Savings>('/api/savings');
 }
 
+export type FunnelStage = {
+  name: string;
+  stage?: string;
+  kind: 'baseline' | 'stage' | 'sent';
+  remaining: number;
+  saved: number;
+  pctOfBaseline: number;
+  pctOfPrev: number;
+  terminal?: boolean;
+};
+
+export type SavingsFunnel = {
+  baseline: number;
+  sent: number;
+  totalSaved: number;
+  savedPct: number;
+  requests: number;
+  stages: FunnelStage[];
+};
+
+// getSavingsFunnel fetches the ordered baseline → per-stage → sent token funnel
+// (GET /api/savings/funnel), derived from the same request-log telemetry.
+export function getSavingsFunnel(): Promise<SavingsFunnel> {
+  return getJson<SavingsFunnel>('/api/savings/funnel');
+}
+
 // getRequests fetches the most recent per-hop request-feed entries
 // (newest-first). The schema is loose so the return type is left as
 // unknown[] — callers must render defensively.

@@ -317,6 +317,41 @@ test('GET /api/config returns {} when no config is configured', async () => {
   });
 });
 
+test('GET /api/savings/funnel serves the ordered funnel from the request log', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'shuba-http-funnel-'));
+  const logPath = join(dir, 'requests.jsonl');
+  writeFileSync(
+    logPath,
+    [
+      JSON.stringify({ ts: new Date().toISOString(), stage: 'compact-router', method: 'POST', path: '/v1/messages', action: 'intercept', tokensIn: 1000, tokensOut: 600, tokensSaved: 400 }),
+      JSON.stringify({ ts: new Date().toISOString(), stage: 'dedup', method: 'POST', path: '/v1/messages', action: 'dedup', tokensIn: 600, tokensOut: 500, tokensSaved: 100 }),
+    ].join('\n') + '\n',
+  );
+  const prev = process.env.SHUBA_REQLOG;
+  process.env.SHUBA_REQLOG = logPath;
+  const engine = stubEngine();
+  const server = createControlHttp(engine as any);
+  await new Promise<void>((resolve) => server.listen(0, resolve));
+  const addr = server.address();
+  const port = typeof addr === 'object' && addr ? addr.port : 0;
+  try {
+    const res = await fetch(`http://127.0.0.1:${port}/api/savings/funnel`);
+    assert.equal(res.status, 200);
+    const body: any = await res.json();
+    assert.equal(body.baseline, 1600);
+    assert.equal(body.sent, 1100);
+    assert.equal(body.totalSaved, 500);
+    assert.deepEqual(body.stages.map((s: any) => s.name), ['Would-be-sent', 'compact-router', 'dedup']);
+    assert.equal(body.stages.at(-1).terminal, true);
+    assert.equal(body.stages.at(-1).remaining, 1100);
+  } finally {
+    server.close();
+    if (prev === undefined) delete process.env.SHUBA_REQLOG;
+    else process.env.SHUBA_REQLOG = prev;
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test('GET /api/config with a cross-origin Origin header returns 403 (Origin guard applies)', async () => {
   const engine = stubEngine();
   const server = createControlHttp(engine as any, { config: { foo: 'bar' } as any });

@@ -5,7 +5,7 @@ import { createHash } from 'node:crypto';
 import type { DelegateInput, JobStatus } from './types.ts';
 import { isStageEnabled, persistToggle, runtimePath, setToggle } from './toggles.ts';
 import { configPath } from '../config.ts';
-import { readSavings } from './reqlog.ts';
+import { readSavings, readSavingsFunnel } from './reqlog.ts';
 import { readSettings, writeSettings, readChainRaw } from './settings-store.ts';
 
 type Engine = {
@@ -324,6 +324,13 @@ export function createControlHttp(
       // Aggregate token-savings telemetry straight from the request log — no
       // collector dependency, and readSavings never throws.
       sendJson(res, 200, readSavings());
+      return;
+    }
+
+    if (method === 'GET' && pathname === '/api/savings/funnel') {
+      // Same request-log source as /api/savings, shaped into an ordered
+      // baseline → per-stage → sent funnel for the console chart. Never throws.
+      sendJson(res, 200, readSavingsFunnel());
       return;
     }
 

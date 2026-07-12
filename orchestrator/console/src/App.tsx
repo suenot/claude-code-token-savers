@@ -7,6 +7,7 @@ import { HarnessView } from './views/HarnessView.tsx';
 import { JobsView } from './views/JobsView.tsx';
 import { GraphView } from './views/GraphView.tsx';
 import { SavingsView } from './views/SavingsView.tsx';
+import { FunnelView } from './views/FunnelView.tsx';
 import { RequestFeedView } from './views/RequestFeedView.tsx';
 import { MonitorsView } from './views/MonitorsView.tsx';
 import { CompareView } from './views/CompareView.tsx';
@@ -37,6 +38,7 @@ const GROUPS: Group[] = [
     icon: 'usage',
     tabs: [
       { id: 'usage', label: 'Usage', icon: 'usage', title: 'Usage', sub: 'A cross-stage ledger of tokens saved, per model and per stage.', render: () => <SavingsView /> },
+      { id: 'funnel', label: 'Funnel', icon: 'funnel', title: 'Savings funnel', sub: 'Tokens from would-be-sent down through each savings stage to what actually left.', render: () => <FunnelView /> },
       { id: 'requests', label: 'Requests', icon: 'requests', title: 'Requests', sub: 'What actually left for the API, hop by hop.', render: () => <RequestFeedView /> },
       { id: 'monitors', label: 'Monitors', icon: 'monitors', title: 'Monitors', sub: 'Live stage health.', render: () => <MonitorsView /> },
     ],

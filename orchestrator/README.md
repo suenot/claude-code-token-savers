@@ -91,11 +91,12 @@ pinned compiled binary, not whatever the working tree currently holds):
 ```bash
 cd orchestrator
 bun run build                            # compiles ./shuba (single-file executable)
-sudo cp shuba /usr/local/bin/shuba       # copy, not symlink — a real pinned artifact
+cp shuba ~/.local/bin/shuba              # copy, not symlink — a real pinned artifact
+                                         # (~/.local/bin: on PATH, no sudo needed)
 ```
 
-Updating is explicit: `git pull && bun run build && sudo cp shuba
-/usr/local/bin/shuba` — until you do, the global `shuba` keeps running the
+Updating is explicit: `git pull && bun run build && cp shuba
+~/.local/bin/shuba` — until you do, the global `shuba` keeps running the
 previous build regardless of what the working tree holds. The external proxies shuba wraps are installed separately —
 shuba does not vendor or auto-install them:
 

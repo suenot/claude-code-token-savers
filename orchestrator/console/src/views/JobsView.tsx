@@ -143,7 +143,7 @@ export function JobsView() {
               <p>
                 status: {result.status} | exit_code: {result.exit_code ?? '-'} | log_path: {result.log_path}
               </p>
-              <pre style={{ whiteSpace: 'pre-wrap', backgroundColor: '#f5f5f5', padding: '8px' }}>
+              <pre style={{ whiteSpace: 'pre-wrap', background: 'var(--panel-2)', border: '1px solid var(--border)', borderRadius: '6px', padding: '10px' }}>
                 {result.result}
               </pre>
             </div>

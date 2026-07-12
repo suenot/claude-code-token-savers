@@ -100,7 +100,7 @@ export function RequestFeedView() {
             {filtered.map((req, i) => {
               const isRateLimited = req.upstreamStatus === 429 || req.status === 429;
               return (
-                <tr key={i} style={isRateLimited ? { backgroundColor: '#fdecea' } : undefined}>
+                <tr key={i} style={isRateLimited ? { backgroundColor: 'rgba(240, 90, 90, 0.14)' } : undefined}>
                   <td style={{ padding: '4px 8px' }}>{fmtTimestamp(req)}</td>
                   <td style={{ padding: '4px 8px' }}>{fmtCell(req.stage ?? req.source)}</td>
                   <td style={{ padding: '4px 8px' }}>{fmtCell(req.path)}</td>
@@ -110,7 +110,7 @@ export function RequestFeedView() {
                   <td
                     style={{
                       padding: '4px 8px',
-                      color: isRateLimited ? '#c0392b' : undefined,
+                      color: isRateLimited ? 'var(--bad)' : undefined,
                       fontWeight: isRateLimited ? 'bold' : undefined,
                     }}
                   >
@@ -119,7 +119,7 @@ export function RequestFeedView() {
                   <td
                     style={{
                       padding: '4px 8px',
-                      color: isRateLimited ? '#c0392b' : undefined,
+                      color: isRateLimited ? 'var(--bad)' : undefined,
                       fontWeight: isRateLimited ? 'bold' : undefined,
                     }}
                   >

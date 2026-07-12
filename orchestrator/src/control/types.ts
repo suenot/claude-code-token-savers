@@ -32,6 +32,11 @@ export type JobRecord = {
   // finishes a clean, in-scope, changed run. Nonzero exit downgrades the
   // outcome to 'discard'. Absent = no validation.
   validate?: string;
+  // Compact pre-run state of the source repo (job.cwd), captured just before
+  // the harness spawns — an audit/repro aid, deliberately not a full file/SHA
+  // manifest so the job JSON stays small. Absent when cwd isn't a git repo or
+  // any git command failed.
+  snapshot?: { commit: string; dirty: boolean; files: number };
   worktreePath?: string;
   error?: string;
 };

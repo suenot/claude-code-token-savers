@@ -3,7 +3,7 @@ import type { Store } from './store.ts';
 import type { HarnessAdapter } from './harnesses.ts';
 import { HARNESSES } from './harnesses.ts';
 import type { JobRecord, JobOutcome } from './types.ts';
-import { createWorktree, finalizeWorktree } from './worktree.ts';
+import { createWorktree, finalizeWorktree, defaultExec, type ExecImpl } from './worktree.ts';
 
 // Files matching none of the scope globs. A file is in scope if any glob
 // matches it (globs are relative to job.cwd, same as the changed paths git
@@ -25,6 +25,7 @@ export function createRunner(opts: {
   now?: () => number;
   createWorktreeImpl?: typeof createWorktree;
   finalizeWorktreeImpl?: typeof finalizeWorktree;
+  execImpl?: ExecImpl;
 }): {
   run(job: JobRecord): Promise<void>;
 } {
@@ -35,6 +36,24 @@ export function createRunner(opts: {
   const now = opts.now ?? (() => Date.now());
   const createWorktreeImpl = opts.createWorktreeImpl ?? createWorktree;
   const finalizeWorktreeImpl = opts.finalizeWorktreeImpl ?? finalizeWorktree;
+  const execImpl = opts.execImpl ?? defaultExec;
+
+  // Compact pre-run state of the source repo, for audit/repro. Best-effort:
+  // any git failure (non-repo cwd included) yields undefined so the job runs
+  // regardless — the snapshot is a convenience, never a gate.
+  function captureSnapshot(
+    cwd: string,
+  ): { commit: string; dirty: boolean; files: number } | undefined {
+    try {
+      const commit = execImpl('git', ['rev-parse', 'HEAD'], { cwd }).trim();
+      const dirty = execImpl('git', ['status', '--porcelain'], { cwd }).trim() !== '';
+      const lsFiles = execImpl('git', ['ls-files'], { cwd });
+      const files = lsFiles.split('\n').filter((l) => l.trim() !== '').length;
+      return { commit, dirty, files };
+    } catch {
+      return undefined;
+    }
+  }
 
   return {
     async run(job: JobRecord): Promise<void> {
@@ -81,7 +100,14 @@ export function createRunner(opts: {
           job = store.update(job.id, { worktreePath: path });
         }
 
-        store.update(job.id, { status: 'running', startedAt: now() });
+        // Snapshot the source repo (job.cwd, not the worktree) just before the
+        // harness runs, so the recorded HEAD/dirty/file-count reflect what the
+        // job started from.
+        const snapshot = captureSnapshot(job.cwd);
+        if (!snapshot) {
+          store.appendLog(job.id, `\n--- snapshot skipped (cwd not a git repo or git failed) ---\n`);
+        }
+        store.update(job.id, { status: 'running', startedAt: now(), snapshot });
 
         await new Promise<void>((resolve) => {
           let settled = false;

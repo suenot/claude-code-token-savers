@@ -301,6 +301,60 @@ test('validate runs in job.cwd for a non-worktree job', async () => {
   assert.equal(calls[0].opts.cwd, '/r');
 });
 
+// A worktree ExecImpl double: dispatches canned output per git subcommand.
+function fakeExec(map: Record<string, string | (() => string)>) {
+  const calls: string[][] = [];
+  const impl = (file: string, args: string[], _opts: { cwd: string }) => {
+    calls.push([file, ...args]);
+    const key = args[0];
+    const v = map[key];
+    if (v === undefined) throw new Error(`unexpected git ${key}`);
+    return typeof v === 'function' ? v() : v;
+  };
+  return { impl, calls };
+}
+
+test('snapshot captured — commit sha, clean tree, tracked-file count', async () => {
+  const store = createStore({ dir: mkdtempSync(join(tmpdir(),'r-')), now: () => 7 });
+  const job = store.create({ id:'', task:'t', harness:'gemini', model:null, cwd:'/repo', isolation:'none' } as any);
+  const { impl } = fakeExec({
+    'rev-parse': 'abc123\n',
+    'status': '',                 // clean
+    'ls-files': 'a.ts\nb.ts\nc.ts\n',
+  });
+  const runner = createRunner({ store, spawnImpl: fakeSpawn('', 0) as any, execImpl: impl as any });
+  await runner.run(store.get(job.id)!);
+  const snap = store.get(job.id)!.snapshot!;
+  assert.equal(snap.commit, 'abc123');
+  assert.equal(snap.dirty, false);
+  assert.equal(snap.files, 3);
+});
+
+test('snapshot dirty detection — non-empty porcelain → dirty true', async () => {
+  const store = createStore({ dir: mkdtempSync(join(tmpdir(),'r-')), now: () => 7 });
+  const job = store.create({ id:'', task:'t', harness:'gemini', model:null, cwd:'/repo', isolation:'none' } as any);
+  const { impl } = fakeExec({
+    'rev-parse': 'deadbeef\n',
+    'status': ' M a.ts\n?? new.ts\n',
+    'ls-files': 'a.ts\n',
+  });
+  const runner = createRunner({ store, spawnImpl: fakeSpawn('', 0) as any, execImpl: impl as any });
+  await runner.run(store.get(job.id)!);
+  assert.equal(store.get(job.id)!.snapshot!.dirty, true);
+});
+
+test('snapshot git failure → job still runs, snapshot absent, log line present', async () => {
+  const store = createStore({ dir: mkdtempSync(join(tmpdir(),'r-')), now: () => 7 });
+  const job = store.create({ id:'', task:'t', harness:'gemini', model:null, cwd:'/not-a-repo', isolation:'none' } as any);
+  const impl = (() => { throw new Error('fatal: not a git repository'); }) as any;
+  const runner = createRunner({ store, spawnImpl: fakeSpawn('hi\n', 0) as any, execImpl: impl });
+  await runner.run(store.get(job.id)!);
+  const done = store.get(job.id)!;
+  assert.equal(done.status, 'done');            // job ran regardless
+  assert.equal(done.snapshot, undefined);
+  assert.match(store.readLog(job.id), /snapshot skipped/);
+});
+
 test('finalizeWorktree throws on close → run() still resolves, job terminal, error logged', async () => {
   const store = createStore({ dir: mkdtempSync(join(tmpdir(), 'r-')), now: () => 7 });
   const job = store.create({

@@ -1,4 +1,4 @@
-import { spawn as defaultSpawn } from 'node:child_process';
+import { spawn as defaultSpawn, spawnSync as defaultSpawnSync } from 'node:child_process';
 import type { Store } from './store.ts';
 import type { HarnessAdapter } from './harnesses.ts';
 import { HARNESSES } from './harnesses.ts';
@@ -13,10 +13,15 @@ function filesOutsideScope(files: string[], scope: string[]): string[] {
   return files.filter((f) => !globs.some((glob) => glob.match(f)));
 }
 
+// Cap on the validate command so a hung test/lint suite can't wedge the engine
+// slot forever. spawnSync enforces this itself (SIGTERM on expiry).
+const VALIDATE_TIMEOUT_MS = 5 * 60 * 1000;
+
 export function createRunner(opts: {
   store: Store;
   harnesses?: Record<string, HarnessAdapter>;
   spawnImpl?: typeof import('node:child_process').spawn;
+  spawnSyncImpl?: typeof import('node:child_process').spawnSync;
   now?: () => number;
   createWorktreeImpl?: typeof createWorktree;
   finalizeWorktreeImpl?: typeof finalizeWorktree;
@@ -26,6 +31,7 @@ export function createRunner(opts: {
   const store = opts.store;
   const harnesses = opts.harnesses ?? HARNESSES;
   const spawnImpl = opts.spawnImpl ?? defaultSpawn;
+  const spawnSyncImpl = opts.spawnSyncImpl ?? defaultSpawnSync;
   const now = opts.now ?? (() => Date.now());
   const createWorktreeImpl = opts.createWorktreeImpl ?? createWorktree;
   const finalizeWorktreeImpl = opts.finalizeWorktreeImpl ?? finalizeWorktree;
@@ -120,6 +126,34 @@ export function createRunner(opts: {
                   job.id,
                   `\n--- scope set but unverifiable (non-worktree job); scope [${scope.join(', ')}] not enforced ---\n`,
                 );
+              }
+            }
+            // Deterministic validate step (clean exits that survived the scope
+            // gate only — 'no-change' has nothing to validate and already
+            // removed its worktree). The harness succeeding is not proof the
+            // change is good; validate is the verdict layer. Runs in the
+            // worktree (still present because a 'keep' job has removed=false) or
+            // job.cwd for non-worktree jobs. A nonzero exit, timeout, or spawn
+            // failure downgrades the outcome to 'discard' but leaves status
+            // 'done' — the harness itself did finish.
+            if (outcome === 'keep' && job.validate) {
+              const cmd = job.validate;
+              const result = spawnSyncImpl(cmd, {
+                cwd: worktreePath ?? job.cwd,
+                shell: true,
+                encoding: 'utf8',
+                timeout: VALIDATE_TIMEOUT_MS,
+              });
+              const out = `${result.stdout ?? ''}${result.stderr ?? ''}`;
+              store.appendLog(job.id, `\n--- validate: ${cmd} ---\n${out}\n`);
+              if (result.error) {
+                // spawn failure or timeout (SIGTERM) — either way, unvalidated.
+                outcome = 'discard';
+                store.appendLog(job.id, `\n--- validate failed: ${result.error.message} ---\n`);
+              } else if (result.status !== 0) {
+                outcome = 'discard';
+                const why = result.signal ? `signal ${result.signal}` : `exit ${result.status}`;
+                store.appendLog(job.id, `\n--- validate failed: ${why} ---\n`);
               }
             }
             store.update(job.id, {

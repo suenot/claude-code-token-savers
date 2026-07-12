@@ -24,6 +24,7 @@ const delegateInputShape = {
   files: z.array(z.string()).optional(),
   isolation: z.enum(['none', 'worktree']).optional(),
   scope: z.array(z.string()).optional(),
+  validate: z.string().optional(),
 };
 
 function textResult(value: unknown): { content: Array<{ type: 'text'; text: string }> } {

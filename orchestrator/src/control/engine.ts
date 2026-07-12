@@ -65,6 +65,7 @@ export function createEngine(opts: {
         cwd: input.cwd ?? opts.projectCwd,
         isolation: input.isolation ?? opts.cfg.isolation ?? 'none',
         scope: input.scope,
+        validate: input.validate,
       });
       queue.push(job.id);
       pump();

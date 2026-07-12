@@ -204,6 +204,103 @@ test('non-worktree job + scope → warning logged, outcome unchanged (keep)', as
   assert.match(store.readLog(job.id), /scope set but unverifiable/);
 });
 
+// A spawnSync double: records the call and returns a canned result.
+function fakeSpawnSync(result: any) {
+  const calls: any[] = [];
+  const impl = (cmd: string, opts: any) => {
+    calls.push({ cmd, opts });
+    return result;
+  };
+  return { impl, calls };
+}
+
+test('validate passes (exit 0) → keep; header logged', async () => {
+  const store = createStore({ dir: mkdtempSync(join(tmpdir(),'r-')), now: () => 7 });
+  const job = store.create({ id:'', task:'t', harness:'gemini', model:null, cwd:'/repo', isolation:'worktree', validate:'bun test' } as any);
+  const createWorktreeImpl = (() => ({ path: '/repo/.shuba-worktrees/x' })) as any;
+  const finalizeWorktreeImpl = (() => ({ diff: 'd', removed: false, files: ['src/a.ts'] })) as any;
+  const { impl } = fakeSpawnSync({ status: 0, stdout: 'ok\n', stderr: '' });
+  const runner = createRunner({ store, spawnImpl: fakeSpawn('', 0) as any, spawnSyncImpl: impl as any, createWorktreeImpl, finalizeWorktreeImpl });
+  await runner.run(store.get(job.id)!);
+  assert.equal(store.get(job.id)!.outcome, 'keep');
+  assert.match(store.readLog(job.id), /--- validate: bun test ---/);
+});
+
+test('validate fails (nonzero exit) → discard; header + reason logged, status stays done', async () => {
+  const store = createStore({ dir: mkdtempSync(join(tmpdir(),'r-')), now: () => 7 });
+  const job = store.create({ id:'', task:'t', harness:'gemini', model:null, cwd:'/repo', isolation:'worktree', validate:'bun test' } as any);
+  const createWorktreeImpl = (() => ({ path: '/repo/.shuba-worktrees/x' })) as any;
+  const finalizeWorktreeImpl = (() => ({ diff: 'd', removed: false, files: ['src/a.ts'] })) as any;
+  const { impl } = fakeSpawnSync({ status: 1, stdout: '', stderr: 'boom\n' });
+  const runner = createRunner({ store, spawnImpl: fakeSpawn('', 0) as any, spawnSyncImpl: impl as any, createWorktreeImpl, finalizeWorktreeImpl });
+  await runner.run(store.get(job.id)!);
+  assert.equal(store.get(job.id)!.status, 'done');
+  assert.equal(store.get(job.id)!.outcome, 'discard');
+  assert.match(store.readLog(job.id), /--- validate: bun test ---/);
+  assert.match(store.readLog(job.id), /validate failed: exit 1/);
+});
+
+test('validate spawn failure/timeout (result.error) → discard', async () => {
+  const store = createStore({ dir: mkdtempSync(join(tmpdir(),'r-')), now: () => 7 });
+  const job = store.create({ id:'', task:'t', harness:'gemini', model:null, cwd:'/repo', isolation:'worktree', validate:'bun test' } as any);
+  const createWorktreeImpl = (() => ({ path: '/repo/.shuba-worktrees/x' })) as any;
+  const finalizeWorktreeImpl = (() => ({ diff: 'd', removed: false, files: ['src/a.ts'] })) as any;
+  const { impl } = fakeSpawnSync({ status: null, signal: 'SIGTERM', stdout: '', stderr: '', error: new Error('spawnSync bun test ETIMEDOUT') });
+  const runner = createRunner({ store, spawnImpl: fakeSpawn('', 0) as any, spawnSyncImpl: impl as any, createWorktreeImpl, finalizeWorktreeImpl });
+  await runner.run(store.get(job.id)!);
+  assert.equal(store.get(job.id)!.outcome, 'discard');
+  assert.match(store.readLog(job.id), /validate failed: spawnSync bun test ETIMEDOUT/);
+});
+
+test('no validate → outcome unchanged (keep), validate not invoked', async () => {
+  const store = createStore({ dir: mkdtempSync(join(tmpdir(),'r-')), now: () => 7 });
+  const job = store.create({ id:'', task:'t', harness:'gemini', model:null, cwd:'/repo', isolation:'worktree' } as any);
+  const createWorktreeImpl = (() => ({ path: '/repo/.shuba-worktrees/x' })) as any;
+  const finalizeWorktreeImpl = (() => ({ diff: 'd', removed: false, files: ['src/a.ts'] })) as any;
+  const { impl, calls } = fakeSpawnSync({ status: 0, stdout: '', stderr: '' });
+  const runner = createRunner({ store, spawnImpl: fakeSpawn('', 0) as any, spawnSyncImpl: impl as any, createWorktreeImpl, finalizeWorktreeImpl });
+  await runner.run(store.get(job.id)!);
+  assert.equal(store.get(job.id)!.outcome, 'keep');
+  assert.equal(calls.length, 0);
+});
+
+test('validate skipped on no-change (empty diff), validate not invoked', async () => {
+  const store = createStore({ dir: mkdtempSync(join(tmpdir(),'r-')), now: () => 7 });
+  const job = store.create({ id:'', task:'t', harness:'gemini', model:null, cwd:'/repo', isolation:'worktree', validate:'bun test' } as any);
+  const createWorktreeImpl = (() => ({ path: '/repo/.shuba-worktrees/x' })) as any;
+  const finalizeWorktreeImpl = (() => ({ diff: '', removed: true, files: [] })) as any;
+  const { impl, calls } = fakeSpawnSync({ status: 0, stdout: '', stderr: '' });
+  const runner = createRunner({ store, spawnImpl: fakeSpawn('', 0) as any, spawnSyncImpl: impl as any, createWorktreeImpl, finalizeWorktreeImpl });
+  await runner.run(store.get(job.id)!);
+  assert.equal(store.get(job.id)!.outcome, 'no-change');
+  assert.equal(calls.length, 0);
+});
+
+test('validate runs in the worktree path when isolated (cwd passed to spawnSync)', async () => {
+  const store = createStore({ dir: mkdtempSync(join(tmpdir(),'r-')), now: () => 7 });
+  const job = store.create({ id:'', task:'t', harness:'gemini', model:null, cwd:'/repo', isolation:'worktree', validate:'bun test' } as any);
+  const createWorktreeImpl = (() => ({ path: '/repo/.shuba-worktrees/x' })) as any;
+  const finalizeWorktreeImpl = (() => ({ diff: 'd', removed: false, files: ['src/a.ts'] })) as any;
+  const { impl, calls } = fakeSpawnSync({ status: 0, stdout: '', stderr: '' });
+  const runner = createRunner({ store, spawnImpl: fakeSpawn('', 0) as any, spawnSyncImpl: impl as any, createWorktreeImpl, finalizeWorktreeImpl });
+  await runner.run(store.get(job.id)!);
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].cmd, 'bun test');
+  assert.equal(calls[0].opts.cwd, '/repo/.shuba-worktrees/x');
+  assert.equal(calls[0].opts.shell, true);
+});
+
+test('validate runs in job.cwd for a non-worktree job', async () => {
+  const store = createStore({ dir: mkdtempSync(join(tmpdir(),'r-')), now: () => 7 });
+  const job = store.create({ id:'', task:'t', harness:'gemini', model:null, cwd:'/r', isolation:'none', validate:'bun test' } as any);
+  const { impl, calls } = fakeSpawnSync({ status: 0, stdout: '', stderr: '' });
+  const runner = createRunner({ store, spawnImpl: fakeSpawn('', 0) as any, spawnSyncImpl: impl as any });
+  await runner.run(store.get(job.id)!);
+  assert.equal(store.get(job.id)!.outcome, 'keep');
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].opts.cwd, '/r');
+});
+
 test('finalizeWorktree throws on close → run() still resolves, job terminal, error logged', async () => {
   const store = createStore({ dir: mkdtempSync(join(tmpdir(), 'r-')), now: () => 7 });
   const job = store.create({

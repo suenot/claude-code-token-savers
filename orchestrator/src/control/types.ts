@@ -2,8 +2,8 @@ export type JobStatus = 'queued' | 'running' | 'done' | 'failed';
 
 // A finer-grained verdict on what a finished job produced, orthogonal to the
 // coarse done/failed status. Feeds the eval loop (inspired by the Meta-Harness
-// paper). 'timeout' and 'scope-violation' are reserved for upcoming features —
-// per-job timeout support and the write-scope gate — and are not emitted yet.
+// paper). 'timeout' is reserved for upcoming per-job timeout support and is
+// not emitted yet.
 export type JobOutcome =
   | 'keep'
   | 'discard'
@@ -28,6 +28,10 @@ export type JobRecord = {
   // the write-scope gate flags a clean run 'scope-violation' if it changed any
   // file matching none of these globs. Absent/empty = no restriction.
   scope?: string[];
+  // Shell command (e.g. "bun test", "npm run lint") run after the harness
+  // finishes a clean, in-scope, changed run. Nonzero exit downgrades the
+  // outcome to 'discard'. Absent = no validation.
+  validate?: string;
   worktreePath?: string;
   error?: string;
 };
@@ -40,4 +44,5 @@ export type DelegateInput = {
   files?: string[];
   isolation?: 'none' | 'worktree';
   scope?: string[];
+  validate?: string;
 };

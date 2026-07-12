@@ -10,7 +10,7 @@ import { extractText, type SpawnLike } from '../image/ocr.ts';
 import { resolveTarget } from '../control/providers.ts';
 
 const PX_PER_TOKEN = 750;
-const DEFAULT_VISION_TARGET = 'a8e/a8e-1.0-pro';
+const DEFAULT_VISION_TARGET = 'a8e/minimax-m3';
 
 const FORMATS = new Set(['image/png', 'image/jpeg', 'image/webp']);
 

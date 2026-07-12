@@ -168,6 +168,10 @@ function scanMcp(claudeRoot: string, projectCwd?: string): ScannedCapability[] {
 
   for (const { path, servers } of sources) {
     for (const [serverKey, config] of Object.entries(servers)) {
+      // shuba-control is the lifeline: the single MCP connection Claude Code
+      // keeps so the gateway/delegation/console keep working. It must never
+      // be offered for takeover — importing it would sever shuba itself.
+      if (serverKey === 'shuba-control') continue;
       const id = `mcp:${serverKey}`;
       if (seen.has(id)) continue;
       seen.add(id);

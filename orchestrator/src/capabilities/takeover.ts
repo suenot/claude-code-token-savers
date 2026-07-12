@@ -193,18 +193,21 @@ export function createCapabilities(deps: Deps = {}): CapabilitiesModule {
     return entry;
   }
 
+  // Idempotence means converging on the end state, not skipping: an entry can
+  // be in the store while Claude Code still has the capability live (e.g. a
+  // plugin imported before the settings.json flip existed, or a file the user
+  // restored by hand). The scanner only reports live capabilities, so anything
+  // it returns gets (re-)imported — copy refreshed, removal re-applied,
+  // reversal updated to the latest backup.
   function importOne(id: string): CapabilityEntry | undefined {
-    // Idempotent: importing an already-imported id is a no-op.
-    if (store.has(id)) return store.get(id);
     const item = doScan().find((c) => c.id === id);
-    if (!item) return undefined;
+    if (!item) return store.get(id);
     return importItem(item);
   }
 
   function importAll(): CapabilityEntry[] {
     const out: CapabilityEntry[] = [];
     for (const item of doScan()) {
-      if (store.has(item.id)) continue;
       out.push(importItem(item));
     }
     return out;

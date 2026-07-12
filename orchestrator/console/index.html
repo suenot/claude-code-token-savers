@@ -23,8 +23,30 @@
         --warn: #e0a13a;
         --bad: #f05a5a;
         --radius: 10px;
+        --code-bg: rgba(255, 255, 255, 0.06);
         --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
       }
+      :root[data-theme="light"] {
+        color-scheme: light;
+        --bg: #f6f7f8;
+        --rail: #eef0f2;
+        --sidebar: #ffffff;
+        --panel: #ffffff;
+        --panel-2: #f3f4f6;
+        --border: #e3e5e9;
+        --border-soft: #edeef1;
+        --text: #17181b;
+        --muted: #5c6069;
+        --faint: #9aa0a8;
+        --accent: #2b6fe0;
+        --accent-soft: rgba(43, 111, 224, 0.1);
+        --ok: #15a34a;
+        --warn: #c07f16;
+        --bad: #d64545;
+        --code-bg: rgba(0, 0, 0, 0.05);
+      }
+      :root[data-theme="light"] .nav-item.active { color: #1b4fa8; }
+      :root[data-theme="light"] .rail-icon.active { color: #1b4fa8; }
       * { box-sizing: border-box; }
       html, body { margin: 0; height: 100%; }
       body {
@@ -39,7 +61,7 @@
       code {
         font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
         font-size: 0.88em;
-        background: rgba(255, 255, 255, 0.06);
+        background: var(--code-bg);
         padding: 1px 5px;
         border-radius: 4px;
       }
@@ -98,10 +120,20 @@
       .page-header {
         padding: 26px 0 20px; margin-bottom: 8px;
         border-bottom: 1px solid var(--border-soft);
+        display: flex; align-items: flex-start; justify-content: space-between; gap: 16px;
       }
       .page-title { font-size: 20px; font-weight: 600; margin: 0; }
       .page-sub { color: var(--muted); margin: 6px 0 0; font-size: 13.5px; }
-      .content-body { padding-top: 22px; max-width: 1080px; }
+      .content-body { padding-top: 22px; width: 100%; }
+
+      /* theme toggle */
+      .theme-toggle {
+        display: grid; place-items: center;
+        width: 34px; height: 34px; border-radius: 8px;
+        background: transparent; border: 1px solid var(--border); cursor: pointer;
+        color: var(--muted);
+      }
+      .theme-toggle:hover { color: var(--text); background: rgba(127,127,127,0.08); }
 
       /* ---- panels / cards ---- */
       .panel {

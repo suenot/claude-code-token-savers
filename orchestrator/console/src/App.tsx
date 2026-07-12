@@ -1,5 +1,7 @@
 import { useState, type ReactNode } from 'react';
+import { Sun, Moon } from 'lucide-react';
 import { Icon } from './components/Icon.tsx';
+import { useTheme } from './hooks/useTheme.ts';
 import { ChainView } from './views/ChainView.tsx';
 import { HarnessView } from './views/HarnessView.tsx';
 import { JobsView } from './views/JobsView.tsx';
@@ -63,6 +65,7 @@ const ALL_TABS = GROUPS.flatMap((g) => g.tabs);
 
 export function App() {
   const [activeId, setActiveId] = useState<string>(ALL_TABS[0].id);
+  const { theme, toggle } = useTheme();
   const active = ALL_TABS.find((t) => t.id === activeId) ?? ALL_TABS[0];
   const activeGroup = GROUPS.find((g) => g.tabs.some((t) => t.id === activeId)) ?? GROUPS[0];
 
@@ -107,8 +110,19 @@ export function App() {
 
       <main className="content">
         <header className="page-header">
-          <h1 className="page-title">{active.title}</h1>
-          <p className="page-sub">{active.sub}</p>
+          <div>
+            <h1 className="page-title">{active.title}</h1>
+            <p className="page-sub">{active.sub}</p>
+          </div>
+          <button
+            type="button"
+            className="theme-toggle"
+            onClick={toggle}
+            title={theme === 'dark' ? 'Switch to light' : 'Switch to dark'}
+            aria-label="Toggle theme"
+          >
+            {theme === 'dark' ? <Sun size={17} /> : <Moon size={17} />}
+          </button>
         </header>
         <div className="content-body">{active.render()}</div>
       </main>

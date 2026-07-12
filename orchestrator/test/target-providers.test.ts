@@ -58,5 +58,10 @@ test('applyRoute resolves a route target to model + upstream', () => {
   const { body, upstream, stats } = applyRoute(req, 'background', { background: { model: 'a8e/a8e-1.0-pro' } });
   assert.equal(body.model, 'a8e/a8e-1.0-pro');
   assert.equal(stats.routedModel, 'a8e/a8e-1.0-pro');
-  assert.deepEqual(upstream, { baseUrl: 'http://localhost:8080/v1', envKey: 'A8E_API_KEY' });
+  assert.deepEqual(upstream, {
+    baseUrl: 'http://localhost:8080/v1',
+    envKey: 'A8E_API_KEY',
+    dialect: 'openai',
+    tools: 'block',
+  });
 });

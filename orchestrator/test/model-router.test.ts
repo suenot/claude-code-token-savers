@@ -54,7 +54,7 @@ test('applyRoute: unknown-provider target passes through as body.model', () => {
 
 test('applyRoute: explicit baseUrl override wins over the provider registry', () => {
   const { upstream } = applyRoute(textReq, 'default', { default: { model: 'm', baseUrl: 'http://x', envKey: 'K' } });
-  assert.deepEqual(upstream, { baseUrl: 'http://x', envKey: 'K' });
+  assert.deepEqual(upstream, { baseUrl: 'http://x', envKey: 'K', dialect: 'openai', tools: 'block' });
 });
 
 test('applyRoute image OCR: injects a text block, keeps image by default', () => {
@@ -176,4 +176,118 @@ test('damper strip: enabled thinking without a budget still strips (0 saved)', (
   assert.equal('thinking' in body, false);
   assert.equal(stats.thinkingAction, 'strip');
   assert.equal(stats.thinkingSaved, 0);
+});
+
+// --- server forward: OpenAI-dialect translation + tool guard -----------------
+
+import { once } from 'node:events';
+import { createModelRouter } from '../src/router/server.ts';
+
+async function withRouter(routes: any, fetchImpl: any, fn: (base: string) => Promise<any>) {
+  const srv = createModelRouter({ port: 0, upstream: 'https://upstream.test', routes, fetchImpl });
+  srv.listen(0);
+  await once(srv, 'listening');
+  const addr = srv.address();
+  const base = `http://127.0.0.1:${typeof addr === 'object' && addr ? addr.port : ''}`;
+  try {
+    return await fn(base);
+  } finally {
+    srv.close();
+  }
+}
+
+const msgReq = (extra: any = {}) => ({
+  model: 'claude-opus-4-8',
+  max_tokens: 100,
+  messages: [{ role: 'user', content: 'hi' }],
+  ...extra,
+});
+const weatherTool = { name: 'get_weather', description: 'w', input_schema: { type: 'object', properties: { q: { type: 'string' } } } };
+
+test('server: tool guard blocks tools by default -> raw passthrough to upstream chain', async () => {
+  const calls: { url: string; body: any }[] = [];
+  const fetchImpl = async (url: string, opts?: any) => {
+    calls.push({ url, body: opts?.body ? JSON.parse(opts.body.toString()) : null });
+    // upstream passthrough
+    return { ok: true, status: 200, headers: new Headers({ 'content-type': 'application/json' }), body: null };
+  };
+  await withRouter({ default: { model: 'a8e/a8e-1.0-pro' } }, fetchImpl, async (base) => {
+    const r = await fetch(`${base}/v1/messages`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(msgReq({ tools: [weatherTool] })),
+    });
+    assert.equal(r.status, 200);
+    // Did NOT translate: went to the upstream chain at /v1/messages, body still Anthropic-shaped.
+    assert.equal(calls.length, 1);
+    assert.ok(calls[0].url.includes('upstream.test/v1/messages'), calls[0].url);
+    assert.equal(calls[0].body.tools[0].name, 'get_weather'); // untranslated Anthropic tool
+  });
+});
+
+test('server: translate mode routes tools to a8e /chat/completions with translated body', async () => {
+  const calls: { url: string; body: any }[] = [];
+  const fetchImpl = async (url: string, opts?: any) => {
+    calls.push({ url, body: opts?.body ? JSON.parse(opts.body.toString()) : null });
+    return {
+      ok: true,
+      status: 200,
+      headers: new Headers({ 'content-type': 'application/json' }),
+      json: async () => ({
+        id: 'chatcmpl-1',
+        model: 'a8e/a8e-1.0-pro',
+        choices: [{ finish_reason: 'tool_calls', message: { content: null, tool_calls: [{ id: 'call_9', function: { name: 'get_weather', arguments: '{"q":"NYC"}' } }] } }],
+        usage: { prompt_tokens: 4, completion_tokens: 2 },
+      }),
+    };
+  };
+  await withRouter({ default: { model: 'a8e/a8e-1.0-pro', tools: 'translate' } }, fetchImpl, async (base) => {
+    const r = await fetch(`${base}/v1/messages`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(msgReq({ tools: [weatherTool] })),
+    });
+    const j = await r.json();
+    // Outgoing: /chat/completions with the tool translated to OpenAI function shape.
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].url, 'http://localhost:8080/v1/chat/completions');
+    assert.equal(calls[0].body.model, 'a8e/a8e-1.0-pro');
+    assert.equal(calls[0].body.tools[0].type, 'function');
+    assert.equal(calls[0].body.tools[0].function.name, 'get_weather');
+    // Response translated back to Anthropic with the tool_use block.
+    assert.equal(j.type, 'message');
+    assert.equal(j.stop_reason, 'tool_use');
+    assert.equal(j.content[0].type, 'tool_use');
+    assert.deepEqual(j.content[0].input, { q: 'NYC' });
+    assert.equal(j.usage.input_tokens, 4);
+  });
+});
+
+test('server: non-tool request routed to a8e hits /chat/completions with translated body', async () => {
+  const calls: { url: string; body: any }[] = [];
+  const fetchImpl = async (url: string, opts?: any) => {
+    calls.push({ url, body: opts?.body ? JSON.parse(opts.body.toString()) : null });
+    return {
+      ok: true,
+      status: 200,
+      headers: new Headers({ 'content-type': 'application/json' }),
+      json: async () => ({ id: 'c1', model: 'a8e/a8e-1.0-pro', choices: [{ finish_reason: 'stop', message: { content: 'hello there' } }], usage: { prompt_tokens: 3, completion_tokens: 2 } }),
+    };
+  };
+  await withRouter({ default: { model: 'a8e/a8e-1.0-pro' } }, fetchImpl, async (base) => {
+    const r = await fetch(`${base}/v1/messages`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(msgReq()),
+    });
+    const j = await r.json();
+    assert.equal(calls.length, 1);
+    assert.ok(calls[0].url.includes('/chat/completions'), calls[0].url);
+    assert.ok(!calls[0].url.includes('/v1/v1/'), 'must not double the /v1 path');
+    // System/user messages present in translated body.
+    assert.equal(calls[0].body.messages[calls[0].body.messages.length - 1].content, 'hi');
+    assert.equal(j.type, 'message');
+    assert.equal(j.content[0].text, 'hello there');
+    assert.equal(j.stop_reason, 'end_turn');
+  });
 });

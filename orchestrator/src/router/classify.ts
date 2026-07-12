@@ -16,7 +16,22 @@ export type Category = 'longContext' | 'image' | 'think' | 'webSearch' | 'backgr
 //                     never adds thinking when the body has none.
 // Routes in the 'background' category strip by default unless they set this.
 export type ThinkingControl = 'strip' | 'keep' | { budget: number };
-export type Route = { model?: string; baseUrl?: string; envKey?: string; thinking?: ThinkingControl };
+// dialect: the wire shape the routed endpoint speaks. 'openai' (default for any
+//   override with a baseUrl) means the request/response must be translated
+//   between Anthropic and OpenAI Chat Completions; 'anthropic' means byte
+//   passthrough (native Anthropic endpoint).
+// tools: what to do when the incoming request carries tools and the route would
+//   move it to a different-dialect target. 'block' (default) declines to route
+//   and lets the normal upstream chain handle it; 'translate' does the full
+//   tool-calling translation.
+export type Route = {
+  model?: string;
+  baseUrl?: string;
+  envKey?: string;
+  thinking?: ThinkingControl;
+  dialect?: 'openai' | 'anthropic';
+  tools?: 'block' | 'translate';
+};
 export type ImageRoute = Route & {
   mode?: 'auto' | 'ocr' | 'vision-route' | 'off';
   dropImage?: boolean;

@@ -15,7 +15,16 @@ const DEFAULT_VISION_TARGET = 'a8e/auto';
 
 const FORMATS = new Set(['image/png', 'image/jpeg', 'image/webp']);
 
-export type Upstream = { baseUrl: string; envKey?: string };
+export type Upstream = {
+  baseUrl: string;
+  envKey?: string;
+  // The wire dialect the endpoint speaks (see Route.dialect). Defaults to
+  // 'openai' for every resolved override except native Anthropic; the router
+  // uses this to decide whether to translate the request/response.
+  dialect: 'openai' | 'anthropic';
+  // Tool guard for this route (see Route.tools). Defaults to 'block'.
+  tools: 'block' | 'translate';
+};
 export type ApplyStats = {
   category: Category;
   routedModel?: string;
@@ -42,10 +51,16 @@ function estImageTokens(block: any): number {
 // route.baseUrl always wins over the provider registry.
 function targetOf(route: Route, raw: string): { model: string; upstream?: Upstream } {
   const r = resolveTarget(raw);
+  // Native Anthropic is byte-passthrough; every other known provider (a8e,
+  // openrouter, openai, deepseek) is OpenAI-shaped and needs translation. An
+  // explicit route.dialect always wins.
+  const dialect: 'openai' | 'anthropic' =
+    route.dialect ?? (r.target.provider === 'anthropic' ? 'anthropic' : 'openai');
+  const tools: 'block' | 'translate' = route.tools ?? 'block';
   const upstream: Upstream | undefined = route.baseUrl
-    ? { baseUrl: route.baseUrl, envKey: route.envKey }
+    ? { baseUrl: route.baseUrl, envKey: route.envKey, dialect, tools }
     : r.baseUrl
-      ? { baseUrl: r.baseUrl, envKey: r.envKey }
+      ? { baseUrl: r.baseUrl, envKey: r.envKey, dialect, tools }
       : undefined;
   return { model: r.model, upstream };
 }

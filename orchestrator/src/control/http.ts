@@ -533,17 +533,21 @@ export function createControlHttp(
         sendJson(res, 400, { error: 'invalid JSON body' });
         return;
       }
-      // Absent id = import everything scanned; a string id imports just that one.
+      // Absent id = import everything scanned; a string id imports just that
+      // one. Both respond with the same { manifest, verify } shape as GET
+      // /api/capabilities — the console swaps its whole view state for the
+      // response, so a bare entry/list here crashed it.
       if (typeof body.id === 'string') {
         const imported = capabilities.importOne(body.id);
         if (!imported) {
           sendJson(res, 404, { error: 'capability not found' });
           return;
         }
-        sendJson(res, 200, imported);
+        sendJson(res, 200, capabilities.list());
         return;
       }
-      sendJson(res, 200, capabilities.importAll());
+      capabilities.importAll();
+      sendJson(res, 200, capabilities.list());
       return;
     }
 

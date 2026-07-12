@@ -134,8 +134,10 @@ export function CapabilitiesView() {
   }, []);
 
   const manifest = data?.manifest ?? [];
-  const leftovers = data?.verify.leftovers ?? [];
-  const clean = data?.verify.clean ?? true;
+  // Optional-chain through verify too: an unexpected response shape must
+  // degrade to an empty view, not crash the whole console tab.
+  const leftovers = data?.verify?.leftovers ?? [];
+  const clean = data?.verify?.clean ?? true;
 
   const byType = (type: CapabilityType): Capability[] => manifest.filter((c) => c.type === type);
 

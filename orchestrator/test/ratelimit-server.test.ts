@@ -84,6 +84,52 @@ test('forwarded request appends a rate-limiter reqlog entry with upstreamStatus'
   }
 });
 
+function webStream(text: string): ReadableStream {
+  return new ReadableStream({
+    start(controller) {
+      controller.enqueue(new TextEncoder().encode(text));
+      controller.close();
+    },
+  });
+}
+
+test('rate-limiter parses upstream usage into the reqlog entry (cache telemetry)', async () => {
+  const prevReqLog = process.env.SHUBA_REQLOG;
+  const dir = mkdtempSync(join(tmpdir(), 'shuba-ratelimit-usage-'));
+  process.env.SHUBA_REQLOG = join(dir, 'requests.jsonl');
+  try {
+    const payload = JSON.stringify({
+      id: 'msg',
+      usage: { input_tokens: 60, output_tokens: 12, cache_read_input_tokens: 900, cache_creation_input_tokens: 30 },
+    });
+    const fetchImpl = async () => ({
+      status: 200,
+      headers: new Headers({ 'content-type': 'application/json' }),
+      body: webStream(payload),
+    });
+    await withServer({ fetchImpl }, async (base) => {
+      const r = await fetch(`${base}/v1/messages`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' });
+      assert.equal(r.status, 200);
+      await r.text();
+    });
+    // The reqlog append happens on the server after the upstream stream drains,
+    // which can land just after the client's fetch resolves — poll briefly.
+    let entry;
+    for (let i = 0; i < 50 && !entry; i++) {
+      entry = readReqLog().find((e) => e.stage === 'rate-limiter' && typeof e.inputTokens === 'number');
+      if (!entry) await new Promise((r) => setTimeout(r, 5));
+    }
+    assert.ok(entry, 'expected a rate-limiter reqlog entry with usage');
+    assert.equal(entry!.inputTokens, 60);
+    assert.equal(entry!.outputTokens, 12);
+    assert.equal(entry!.cacheRead, 900);
+    assert.equal(entry!.cacheWrite, 30);
+  } finally {
+    if (prevReqLog === undefined) delete process.env.SHUBA_REQLOG;
+    else process.env.SHUBA_REQLOG = prevReqLog;
+  }
+});
+
 test('upstream 429 triggers a global cooldown honoring Retry-After', async () => {
   const c = fakeClock();
   const fetchImpl = async () => ({ status: 429, headers: new Headers({ 'retry-after': '7' }), body: null });

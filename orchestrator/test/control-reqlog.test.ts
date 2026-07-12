@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, appendFileSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { appendReqLog, readReqLog, readSavings, readSavingsFunnel, summarizeBody, type ReqLogEntry } from '../src/control/reqlog.ts';
+import { appendReqLog, readReqLog, readSavings, readSavingsFunnel, readCacheStats, parseUsage, summarizeBody, type ReqLogEntry } from '../src/control/reqlog.ts';
 
 function tmpFile() {
   const dir = mkdtempSync(join(tmpdir(), 'shuba-reqlog-'));
@@ -105,6 +105,92 @@ test('readSavingsFunnel returns an empty funnel when there is no telemetry', () 
   assert.equal(f.baseline, 0);
   assert.equal(f.sent, 0);
   assert.deepEqual(f.stages, []);
+});
+
+test('reqlog entry round-trips cache/usage fields', () => {
+  const path = tmpFile();
+  appendReqLog(
+    entry({ inputTokens: 1200, outputTokens: 300, cacheRead: 900, cacheWrite: 100 }),
+    { path },
+  );
+  const out = readReqLog({ path });
+  assert.equal(out.length, 1);
+  assert.equal(out[0]!.inputTokens, 1200);
+  assert.equal(out[0]!.outputTokens, 300);
+  assert.equal(out[0]!.cacheRead, 900);
+  assert.equal(out[0]!.cacheWrite, 100);
+});
+
+test('parseUsage reads usage from a non-streaming JSON response', () => {
+  const body = JSON.stringify({
+    id: 'msg_1',
+    usage: {
+      input_tokens: 50,
+      output_tokens: 120,
+      cache_read_input_tokens: 2000,
+      cache_creation_input_tokens: 300,
+    },
+  });
+  const u = parseUsage(body, 'application/json')!;
+  assert.deepEqual(u, { inputTokens: 50, outputTokens: 120, cacheRead: 2000, cacheWrite: 300 });
+});
+
+test('parseUsage reads usage from an SSE stream (message_start + message_delta)', () => {
+  const sse = [
+    'event: message_start',
+    'data: ' + JSON.stringify({
+      type: 'message_start',
+      message: { usage: { input_tokens: 40, output_tokens: 1, cache_read_input_tokens: 1500, cache_creation_input_tokens: 0 } },
+    }),
+    '',
+    'event: ping',
+    'data: {"type":"ping"}',
+    '',
+    'event: message_delta',
+    'data: ' + JSON.stringify({ type: 'message_delta', usage: { output_tokens: 210 } }),
+    '',
+    'event: message_stop',
+    'data: {"type":"message_stop"}',
+    '',
+  ].join('\n');
+  const u = parseUsage(sse, 'text/event-stream')!;
+  // input/cache come from message_start; output_tokens overridden by the final delta.
+  assert.equal(u.inputTokens, 40);
+  assert.equal(u.cacheRead, 1500);
+  assert.equal(u.cacheWrite, 0);
+  assert.equal(u.outputTokens, 210);
+});
+
+test('parseUsage returns undefined when there is no usage', () => {
+  assert.equal(parseUsage('', 'application/json'), undefined);
+  assert.equal(parseUsage('not json', 'application/json'), undefined);
+  assert.equal(parseUsage(JSON.stringify({ id: 'x' }), 'application/json'), undefined);
+});
+
+test('readCacheStats aggregates usage; ignores entries without it', () => {
+  const path = tmpFile();
+  // A plain forward with no usage is ignored.
+  appendReqLog(entry({ action: 'forward' }), { path });
+  appendReqLog(entry({ inputTokens: 1000, outputTokens: 200, cacheRead: 800, cacheWrite: 50 }), { path });
+  appendReqLog(entry({ inputTokens: 500, outputTokens: 100, cacheRead: 200, cacheWrite: 0 }), { path });
+  const s = readCacheStats({ path });
+  assert.equal(s.requests, 2);
+  assert.equal(s.totalInput, 1500);
+  assert.equal(s.totalOutput, 300);
+  assert.equal(s.totalCacheRead, 1000);
+  assert.equal(s.totalCacheWrite, 50);
+  assert.equal(s.totalProcessed, 2550); // 1500 + 1000 + 50 (input + cacheRead + cacheWrite, additive)
+  assert.equal(s.freshInput, 1550); // 1500 + 50 (uncached input + cache writes, paid full-or-higher)
+  assert.ok(Math.abs(s.cacheHitRatio - 1000 / 2550) < 1e-9); // cacheRead / totalProcessed
+});
+
+test('readCacheStats returns zeros when there is no usage telemetry', () => {
+  const path = tmpFile();
+  appendReqLog(entry({ action: 'forward' }), { path });
+  const s = readCacheStats({ path });
+  assert.equal(s.requests, 0);
+  assert.equal(s.cacheHitRatio, 0);
+  assert.equal(s.freshInput, 0);
 });
 
 test('appendReqLog caps file size by truncating before appending', () => {

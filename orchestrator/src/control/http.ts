@@ -5,7 +5,7 @@ import { createHash } from 'node:crypto';
 import type { DelegateInput, JobStatus } from './types.ts';
 import { isStageEnabled, persistToggle, runtimePath, setToggle } from './toggles.ts';
 import { configPath } from '../config.ts';
-import { readSavings, readSavingsFunnel } from './reqlog.ts';
+import { readSavings, readSavingsFunnel, readCacheStats } from './reqlog.ts';
 import { readSettings, writeSettings, readChainRaw } from './settings-store.ts';
 
 type Engine = {
@@ -346,6 +346,14 @@ export function createControlHttp(
       // Same request-log source as /api/savings, shaped into an ordered
       // baseline → per-stage → sent funnel for the console chart. Never throws.
       sendJson(res, 200, readSavingsFunnel());
+      return;
+    }
+
+    if (method === 'GET' && pathname === '/api/savings/cache') {
+      // Prompt-cache telemetry: real input/cache-read/cache-write token usage
+      // observed on upstream responses, so we can see whether body rewrites are
+      // collapsing Anthropic's cache reuse. Never throws.
+      sendJson(res, 200, readCacheStats());
       return;
     }
 

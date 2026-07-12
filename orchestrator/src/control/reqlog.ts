@@ -28,6 +28,16 @@ export type ReqLogEntry = {
   tokensIn?: number;
   tokensOut?: number;
   tokensSaved?: number;
+  // Real usage observed on the upstream response (parsed best-effort by
+  // parseUsage). Only the terminal stage that talks to the real API sees these,
+  // so they appear on at most one entry per request — no double counting.
+  // `cacheRead`/`cacheWrite` are Anthropic's cache_read_input_tokens /
+  // cache_creation_input_tokens; body rewrites in earlier stages can break the
+  // cache prefix and show up here as a collapsed cacheRead.
+  inputTokens?: number;
+  outputTokens?: number;
+  cacheRead?: number;
+  cacheWrite?: number;
 };
 
 export type SavingsSummary = {
@@ -290,6 +300,137 @@ export function readSavingsFunnel(opts?: { path?: string; limit?: number; maxByt
       requests: s.requests,
       stages,
     };
+  } catch {
+    return empty;
+  }
+}
+
+export type ParsedUsage = {
+  inputTokens?: number;
+  outputTokens?: number;
+  cacheRead?: number;
+  cacheWrite?: number;
+};
+
+// Pull one `usage` object's cache/token counts into our field names. Anthropic
+// splits input across input_tokens (uncached), cache_read_input_tokens, and
+// cache_creation_input_tokens. Returns only the fields actually present.
+function usageFields(usage: any): ParsedUsage {
+  const out: ParsedUsage = {};
+  if (!usage || typeof usage !== 'object') return out;
+  if (typeof usage.input_tokens === 'number') out.inputTokens = usage.input_tokens;
+  if (typeof usage.output_tokens === 'number') out.outputTokens = usage.output_tokens;
+  if (typeof usage.cache_read_input_tokens === 'number') out.cacheRead = usage.cache_read_input_tokens;
+  if (typeof usage.cache_creation_input_tokens === 'number') out.cacheWrite = usage.cache_creation_input_tokens;
+  return out;
+}
+
+// Best-effort extraction of real token usage from an upstream /v1/messages
+// response body, for prompt-cache telemetry. Handles both shapes:
+//   - non-streaming JSON: top-level `usage`.
+//   - SSE stream: `message_start` carries the input/cache counts (and a
+//     provisional output_tokens); the final `output_tokens` lands in the last
+//     `message_delta`. We merge both, letting later events override.
+// Never throws and returns undefined when no usage is found — telemetry must
+// never touch the response path.
+export function parseUsage(body: string, contentType?: string): ParsedUsage | undefined {
+  try {
+    if (typeof body !== 'string' || body.length === 0) return undefined;
+    const looksSse =
+      (contentType ?? '').includes('event-stream') ||
+      body.includes('event:') ||
+      body.includes('\ndata:') ||
+      body.startsWith('data:');
+
+    if (looksSse) {
+      const merged: ParsedUsage = {};
+      let found = false;
+      for (const line of body.split('\n')) {
+        const trimmed = line.trim();
+        if (!trimmed.startsWith('data:')) continue;
+        const payload = trimmed.slice('data:'.length).trim();
+        if (payload === '' || payload === '[DONE]') continue;
+        let evt: any;
+        try {
+          evt = JSON.parse(payload);
+        } catch {
+          continue;
+        }
+        // message_start nests usage under `message`; message_delta puts it at
+        // the top level.
+        const usage = evt?.message?.usage ?? evt?.usage;
+        const fields = usageFields(usage);
+        for (const [k, v] of Object.entries(fields)) {
+          (merged as any)[k] = v;
+          found = true;
+        }
+      }
+      return found ? merged : undefined;
+    }
+
+    const parsed = JSON.parse(body);
+    const fields = usageFields(parsed?.usage);
+    return Object.keys(fields).length > 0 ? fields : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+export type CacheStats = {
+  requests: number; // entries carrying real usage/cache telemetry
+  totalInput: number; // sum of inputTokens (usage.input_tokens — uncached remainder)
+  totalOutput: number; // sum of outputTokens
+  totalCacheRead: number; // sum of cacheRead (cache_read_input_tokens)
+  totalCacheWrite: number; // sum of cacheWrite (cache_creation_input_tokens)
+  totalProcessed: number; // totalInput + totalCacheRead + totalCacheWrite — all input tokens seen
+  freshInput: number; // totalInput + totalCacheWrite — tokens paid at full rate or higher
+  cacheHitRatio: number; // totalCacheRead / totalProcessed
+};
+
+// Aggregate prompt-cache telemetry over the tail of the request log. Only
+// entries that carry real usage (input/cache tokens parsed off an upstream
+// response) are counted, so this never double-counts a request seen by several
+// stages. Never throws — a telemetry read must never break the console.
+//
+// Anthropic's usage splits input three ways and they are additive, not nested:
+// input_tokens is the *uncached* remainder, cache_read_input_tokens are served
+// from cache (cheap), and cache_creation_input_tokens are written to cache
+// (billed at ~1.25x). So the total input actually processed is the sum of all
+// three (totalProcessed), and the tokens paid at full rate or higher are the
+// uncached input plus the cache writes (freshInput). cacheHitRatio is the share
+// of processed input that came from cache — the number that drops when a body
+// rewrite breaks the cache prefix.
+export function readCacheStats(opts?: { path?: string; limit?: number; maxBytes?: number }): CacheStats {
+  const empty: CacheStats = {
+    requests: 0,
+    totalInput: 0,
+    totalOutput: 0,
+    totalCacheRead: 0,
+    totalCacheWrite: 0,
+    totalProcessed: 0,
+    freshInput: 0,
+    cacheHitRatio: 0,
+  };
+  try {
+    const entries = readReqLog({ ...opts, limit: opts?.limit ?? 5000 });
+    const stats = { ...empty };
+    for (const e of entries) {
+      const hasUsage =
+        typeof e.inputTokens === 'number' ||
+        typeof e.cacheRead === 'number' ||
+        typeof e.cacheWrite === 'number' ||
+        typeof e.outputTokens === 'number';
+      if (!hasUsage) continue;
+      stats.requests += 1;
+      stats.totalInput += e.inputTokens ?? 0;
+      stats.totalOutput += e.outputTokens ?? 0;
+      stats.totalCacheRead += e.cacheRead ?? 0;
+      stats.totalCacheWrite += e.cacheWrite ?? 0;
+    }
+    stats.totalProcessed = stats.totalInput + stats.totalCacheRead + stats.totalCacheWrite;
+    stats.freshInput = stats.totalInput + stats.totalCacheWrite;
+    stats.cacheHitRatio = stats.totalProcessed > 0 ? stats.totalCacheRead / stats.totalProcessed : 0;
+    return stats;
   } catch {
     return empty;
   }

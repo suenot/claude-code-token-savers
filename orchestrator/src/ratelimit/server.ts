@@ -1,6 +1,6 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import { Readable } from 'node:stream';
-import { appendReqLog, summarizeBody } from '../control/reqlog.ts';
+import { appendReqLog, summarizeBody, parseUsage, type ParsedUsage } from '../control/reqlog.ts';
 import { isStageEnabled } from '../control/toggles.ts';
 
 const STAGE_ID = 'rate-limiter';
@@ -91,7 +91,13 @@ export function createRateLimiter({
   const log = (...a: string[]) => process.stderr.write(`[rate-limiter] ${a.join(' ')}\n`);
   const gate = createGate({ rps, burst, now, sleep });
 
-  async function forward(req: IncomingMessage, bodyBuf: Buffer, res: ServerResponse, penalizeOn429 = true): Promise<number> {
+  // Cap on the bytes we copy off a response for usage parsing. An SSE
+  // message_start (which carries all the cache/input counts) arrives at the very
+  // start, so even a modest cap always captures the cache telemetry; the cap
+  // just bounds memory on very large responses.
+  const USAGE_CAPTURE_CAP = 1_000_000;
+
+  async function forward(req: IncomingMessage, bodyBuf: Buffer, res: ServerResponse, penalizeOn429 = true): Promise<{ status: number; usage?: ParsedUsage }> {
     const headers: Record<string, any> = { ...req.headers };
     delete headers.host; delete headers['content-length']; delete headers['accept-encoding'];
     const up = await fetchImpl(upstream + req.url, {
@@ -105,16 +111,43 @@ export function createRateLimiter({
       log('upstream 429 — pausing queue', `${cooldown}ms`);
     }
     const out = Object.fromEntries((up.headers && up.headers.entries) ? up.headers.entries() : []);
+    const contentType = typeof out['content-type'] === 'string' ? out['content-type'] : undefined;
     delete out['content-encoding']; delete out['content-length']; delete out['transfer-encoding'];
     res.writeHead(up.status || 200, out);
+    let usage: ParsedUsage | undefined;
     if (up.body) {
       const stream = Readable.fromWeb(up.body as any);
+      // Best-effort bounded tee: copy the bytes as they flow past so we can read
+      // the real token/cache usage off the response, without ever consuming or
+      // delaying what the client receives (pipe and this listener both see each
+      // chunk). Any failure here is swallowed — telemetry never touches the
+      // response path.
+      const captured: Buffer[] = [];
+      let capturedBytes = 0;
+      stream.on('data', (chunk: Buffer) => {
+        try {
+          if (capturedBytes >= USAGE_CAPTURE_CAP) return;
+          const buf = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+          captured.push(buf);
+          capturedBytes += buf.length;
+        } catch { /* observation must never affect the response */ }
+      });
       stream.on('error', () => { try { res.destroy(); } catch { /* already closed */ } });
       stream.pipe(res);
+      // Wait for the stream to drain so `captured` is complete before we parse.
+      // The client is served concurrently via pipe; this only defers the log.
+      await new Promise<void>((resolve) => {
+        stream.on('end', resolve);
+        stream.on('close', resolve);
+        stream.on('error', () => resolve());
+      });
+      try {
+        usage = parseUsage(Buffer.concat(captured).toString('utf8'), contentType);
+      } catch { /* best-effort */ }
     } else {
       res.end();
     }
-    return up.status || 200;
+    return { status: up.status || 200, usage };
   }
 
   const server = createServer((req, res) => {
@@ -133,7 +166,7 @@ export function createRateLimiter({
       try {
         if (enabled) await gate.acquire();
         const start = Date.now();
-        const status = await forward(req, raw, res, enabled);
+        const { status, usage } = await forward(req, raw, res, enabled);
         try {
           appendReqLog({
             ts: new Date().toISOString(),
@@ -144,6 +177,10 @@ export function createRateLimiter({
             upstreamStatus: status,
             durationMs: Date.now() - start,
             ...summary,
+            // Real usage parsed off the upstream response (messages only). This
+            // is the one stage that sees the real API answer, so cache telemetry
+            // is recorded here and nowhere else.
+            ...(isMessages && usage ? usage : {}),
           });
         } catch { /* logging must never affect the response path */ }
       } catch (e: any) {

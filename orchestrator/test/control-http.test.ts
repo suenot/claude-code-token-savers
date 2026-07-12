@@ -352,6 +352,42 @@ test('GET /api/savings/funnel serves the ordered funnel from the request log', a
   }
 });
 
+test('GET /api/savings/cache serves prompt-cache stats from the request log', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'shuba-http-cache-'));
+  const logPath = join(dir, 'requests.jsonl');
+  writeFileSync(
+    logPath,
+    [
+      JSON.stringify({ ts: new Date().toISOString(), stage: 'rate-limiter', method: 'POST', path: '/v1/messages', action: 'forward', inputTokens: 1000, outputTokens: 200, cacheRead: 800, cacheWrite: 50 }),
+      JSON.stringify({ ts: new Date().toISOString(), stage: 'rate-limiter', method: 'POST', path: '/v1/messages', action: 'forward', inputTokens: 500, outputTokens: 100, cacheRead: 200, cacheWrite: 0 }),
+    ].join('\n') + '\n',
+  );
+  const prev = process.env.SHUBA_REQLOG;
+  process.env.SHUBA_REQLOG = logPath;
+  const engine = stubEngine();
+  const server = createControlHttp(engine as any);
+  await new Promise<void>((resolve) => server.listen(0, resolve));
+  const addr = server.address();
+  const port = typeof addr === 'object' && addr ? addr.port : 0;
+  try {
+    const res = await fetch(`http://127.0.0.1:${port}/api/savings/cache`);
+    assert.equal(res.status, 200);
+    const body: any = await res.json();
+    assert.equal(body.requests, 2);
+    assert.equal(body.totalInput, 1500);
+    assert.equal(body.totalCacheRead, 1000);
+    assert.equal(body.totalCacheWrite, 50);
+    assert.equal(body.totalProcessed, 2550);
+    assert.equal(body.freshInput, 1550);
+    assert.ok(Math.abs(body.cacheHitRatio - 1000 / 2550) < 1e-9);
+  } finally {
+    server.close();
+    if (prev === undefined) delete process.env.SHUBA_REQLOG;
+    else process.env.SHUBA_REQLOG = prev;
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test('GET /api/config with a cross-origin Origin header returns 403 (Origin guard applies)', async () => {
   const engine = stubEngine();
   const server = createControlHttp(engine as any, { config: { foo: 'bar' } as any });

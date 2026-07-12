@@ -95,9 +95,23 @@ cp shuba ~/.local/bin/shuba              # copy, not symlink — a real pinned a
                                          # (~/.local/bin: on PATH, no sudo needed)
 ```
 
-Updating is explicit: `git pull && bun run build && cp shuba
-~/.local/bin/shuba` — until you do, the global `shuba` keeps running the
-previous build regardless of what the working tree holds. The external proxies shuba wraps are installed separately —
+### Updating the global build
+
+Updating is explicit — the global `shuba` keeps running the previous build
+until you rebuild and re-copy, regardless of what the working tree holds:
+
+```bash
+cd orchestrator
+git pull
+bun run build                 # recompile ./shuba from current source
+bun test                      # optional but recommended before promoting
+cp shuba ~/.local/bin/shuba   # promote the new build
+shuba status                  # sanity check: chain resolves, stages detected
+```
+
+The console bundle is separate from the binary: after pulling console
+changes also run `bun run console:build` (output `console/dist` is served by
+shuba-control, not embedded in the binary). The external proxies shuba wraps are installed separately —
 shuba does not vendor or auto-install them:
 
 ```bash

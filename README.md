@@ -33,72 +33,72 @@ browsable live in the console's **Compare** tab.
 
 Columns are the tools, rows are features. `✓` built-in · `~` partial / via a stage · `◐` planned in shuba · `·` not offered. The same matrix is browsable live in the console's **Compare** tab.
 
-Tools: **shuba** (Bun/TS) · [cmdop-claude](https://github.com/markolofsen/cmdop-claude) (Python) · [graphify](https://github.com/safishamsi/graphify) (Python) · [claude-code-router](https://github.com/musistudio/claude-code-router) (Node) · [LiteLLM](https://github.com/BerriAI/litellm) (Python) · [headroom](https://headroom-docs.vercel.app/docs) (Python).
+Tools: **shuba** (Bun/TS) · [cmdop-claude](https://github.com/markolofsen/cmdop-claude) (Python) · [graphify](https://github.com/safishamsi/graphify) (Python) · [claude-code-router](https://github.com/musistudio/claude-code-router) (Node) · [headroom](https://headroom-docs.vercel.app/docs) (Python).
 
 **Request / proxy layer** — shrink input tokens before they hit the API:
 
-| feature | shuba | cmdop | graphify | ccr | litellm | headroom |
-|---|:-:|:-:|:-:|:-:|:-:|:-:|
-| Content-aware compression (JSON/code/prose) | ~ | · | · | · | · | ✓ |
-| Downscale request images (native, scale presets, default 1/2) | ✓ | · | · | · | · | · |
-| In-request dedup (identical blocks) | ✓ | · | · | · | · | · |
-| `/compact` routed to a cheap model | ✓ | · | · | · | · | · |
-| Auto-compact at a token threshold (default 300k) | ✓ | · | · | · | · | · |
-| Response / compression cache | ✓ | · | · | · | ✓ | · |
-| Rate limiting | ✓ | · | · | · | ✓ | · |
-| Chain proxies behind one `BASE_URL` | ✓ | · | · | · | · | · |
-| Provider / model routing | ✓ | · | · | ✓ | ✓ | · |
-| Cheap model for the tool's own work (off Claude's budget) | ✓ | ✓ | ✓ | ~ | ~ | · |
+| feature | shuba | cmdop | graphify | ccr | headroom |
+|---|:-:|:-:|:-:|:-:|:-:|
+| Content-aware compression (JSON/code/prose) | ~ | · | · | · | ✓ |
+| Downscale request images (native, scale presets, default 1/2) | ✓ | · | · | · | · |
+| In-request dedup (identical blocks) | ✓ | · | · | · | · |
+| `/compact` routed to a cheap model | ✓ | · | · | · | · |
+| Auto-compact at a token threshold (default 300k) | ✓ | · | · | · | · |
+| Response / compression cache | ✓ | · | · | · | · |
+| Rate limiting | ✓ | · | · | · | · |
+| Chain proxies behind one `BASE_URL` | ✓ | · | · | · | · |
+| Provider / model routing | ✓ | · | · | ✓ | · |
+| Cheap model for the tool's own work (off Claude's budget) | ✓ | ✓ | ✓ | ~ | · |
 
 **Project intelligence / sidecar** — cmdop-claude's core idea: spend cents on a cheap model to keep docs/maps accurate so Claude Code's scarce context isn't spent on it:
 
-| feature | shuba | cmdop | graphify | ccr | litellm | headroom |
-|---|:-:|:-:|:-:|:-:|:-:|:-:|
-| Task queue injected into prompts | ✓ | ✓ | · | · | · | · |
-| Docs review (stale / contradiction / gaps) | ◐ | ✓ | · | · | · | · |
-| Docs auto-fix (LLM edits) | ◐ | ✓ | · | · | · | · |
-| Project map (dir annotations, SHA-cached) | ◐ | ✓ | · | · | · | · |
-| Rules system (lazy `paths:` frontmatter) | · | ✓ | · | · | · | · |
-| Docs search (FTS5 / semantic) | · | ✓ | · | · | · | · |
-| Knowledge graph (query instead of read) | ✓ | · | ✓ | · | · | · |
-| God nodes / community detection | ~ | · | ✓ | · | · | · |
+| feature | shuba | cmdop | graphify | ccr | headroom |
+|---|:-:|:-:|:-:|:-:|:-:|
+| Task queue injected into prompts | ✓ | ✓ | · | · | · |
+| Docs review (stale / contradiction / gaps) | ◐ | ✓ | · | · | · |
+| Docs auto-fix (LLM edits) | ◐ | ✓ | · | · | · |
+| Project map (dir annotations, SHA-cached) | ◐ | ✓ | · | · | · |
+| Rules system (lazy `paths:` frontmatter) | · | ✓ | · | · | · |
+| Docs search (FTS5 / semantic) | · | ✓ | · | · | · |
+| Knowledge graph (query instead of read) | ✓ | · | ✓ | · | · |
+| God nodes / community detection | ~ | · | ✓ | · | · |
 
 **Task-type model routing** — the claude-code-router / hermes pattern, native in shuba's `model-router` stage: classify each request and pick a model per category (all configurable under `modelRouter.routes`):
 
-| route | detected when | shuba | cmdop | graphify | ccr | litellm | headroom |
-|---|---|:-:|:-:|:-:|:-:|:-:|:-:|
-| `default` | anything else | ✓ | · | · | ✓ | ~ | · |
-| `background` | haiku-tier bg calls | ✓ | · | · | ✓ | · | · |
-| `think` | thinking/plan mode | ✓ | · | · | ✓ | · | · |
-| `longContext` | tokens > threshold (60k) | ✓ | · | · | ✓ | · | · |
-| `webSearch` | web_search tool present | ✓ | · | · | ✓ | · | · |
-| `image`/vision | request has images | ✓ | · | · | ✓ | · | · |
-| `compact` | Claude Code `/compact` summarization | ✓ | · | · | · | · | · |
-| **Local OCR** for image reqs (no vision LLM) | request has images | ✓ | · | · | · | · | · |
+| route | detected when | shuba | cmdop | graphify | ccr | headroom |
+|---|---|:-:|:-:|:-:|:-:|:-:|
+| `default` | anything else | ✓ | · | · | ✓ | · |
+| `background` | haiku-tier bg calls | ✓ | · | · | ✓ | · |
+| `think` | thinking/plan mode | ✓ | · | · | ✓ | · |
+| `longContext` | tokens > threshold (60k) | ✓ | · | · | ✓ | · |
+| `webSearch` | web_search tool present | ✓ | · | · | ✓ | · |
+| `image`/vision | request has images | ✓ | · | · | ✓ | · |
+| `compact` | Claude Code `/compact` summarization | ✓ | · | · | · | · |
+| **Local OCR** for image reqs (no vision LLM) | request has images | ✓ | · | · | · | · |
 
 `compact` and `longContext` predate `model-router`: `/compact` summarization is routed to a cheap model by the dedicated **compact-router** stage (its own model, default `a8e/a8e-1.0-pro`), and over-threshold requests are compacted in place by **context-watchdog** — so those two live in their own stages, while `model-router` adds `default`/`background`/`think`/`webSearch`/`image`. The **Local OCR** row is unique: tesseract extracts text from screenshots (code/errors/logs) locally, injected as a text block — optionally dropping the pixels — so most "image analysis" never needs a vision model at all.
 
 **Task delegation / routing** — offload whole tasks off Claude Code onto cheaper harnesses/models:
 
-| feature | shuba | cmdop | graphify | ccr | litellm | headroom |
-|---|:-:|:-:|:-:|:-:|:-:|:-:|
-| Trigger a cheap-model job from Claude via MCP | ✓ | ~ | · | · | · | · |
-| Delegate an **arbitrary** task to a sub-harness (`shuba_delegate`) | ✓ | · | · | · | · | · |
-| LLM-based model/harness routing (cheap classifier picks target) | ✓ | · | · | · | · | · |
-| Per-job git-worktree isolation | ✓ | · | · | · | · | · |
+| feature | shuba | cmdop | graphify | ccr | headroom |
+|---|:-:|:-:|:-:|:-:|:-:|
+| Trigger a cheap-model job from Claude via MCP | ✓ | ~ | · | · | · |
+| Delegate an **arbitrary** task to a sub-harness (`shuba_delegate`) | ✓ | · | · | · | · |
+| LLM-based model/harness routing (cheap classifier picks target) | ✓ | · | · | · | · |
+| Per-job git-worktree isolation | ✓ | · | · | · | · |
 
 cmdop's `~` is the key nuance: it *does* expose a cheap-model job to Claude over MCP — but only the fixed docs-review scan (`sidecar_scan`), not arbitrary task delegation. shuba's `shuba_delegate` hands off any task. Every other tool's cheap-model use is internal (invisible to Claude), which is why the old single "cheap-model offload" row was misleading and is now split three ways: internal use, MCP-triggered fixed job, and MCP arbitrary delegation.
 
 **Ops / visibility:**
 
-| feature | shuba | cmdop | graphify | ccr | litellm | headroom |
-|---|:-:|:-:|:-:|:-:|:-:|:-:|
-| Console / dashboard UI | ✓ | ~ | · | ~ | ✓ | ~ |
-| Live savings telemetry | ✓ | · | · | · | · | ~ |
+| feature | shuba | cmdop | graphify | ccr | headroom |
+|---|:-:|:-:|:-:|:-:|:-:|
+| Console / dashboard UI | ✓ | ~ | · | ~ | ~ |
+| Live savings telemetry | ✓ | · | · | · | ~ |
 
 Cells reflect each tool's primary design intent, not a benchmark. Not affiliated with any listed project.
 
-**Pick by need:** whole request smaller → **headroom** (content-aware compression), which shuba runs for you. Keep docs accurate + auto-fix, project map, rules → **cmdop-claude** (shuba has the task queue today; docs review is `◐` planned). Query a repo instead of reading it → **graphify** (shuba embeds a native reader). Swap providers → **claude-code-router** / **LiteLLM**. Stack all of it behind one endpoint with a task queue and graph in one process → **shuba**.
+**Pick by need:** whole request smaller → **headroom** (content-aware compression), which shuba runs for you. Keep docs accurate + auto-fix, project map, rules → **cmdop-claude** (shuba has the task queue today; docs review is `◐` planned). Query a repo instead of reading it → **graphify** (shuba embeds a native reader). Swap providers → **claude-code-router**. Stack all of it behind one endpoint with a task queue and graph in one process → **shuba**.
 
 > **Docs review / auto-fix is the next thing to port into shuba.** It's *not* the knowledge graph: the graph answers a repo query on demand, whereas cmdop's docs-review is a background sidecar that watches documentation on a cheap model (~$0.003/cycle) and only surfaces findings/edits — so Claude Code's limited context never pays to notice stale docs. Tracked as `◐` above.
 

@@ -74,7 +74,7 @@ export function GraphView() {
         </div>
         {queryError && <p style={{ color: '#e74c3c' }}>Error: {queryError}</p>}
         {!queryError && result !== null && (
-          <pre style={{ whiteSpace: 'pre-wrap', background: '#f7f7f7', padding: '8px', borderRadius: '4px' }}>
+          <pre style={{ whiteSpace: 'pre-wrap', background: 'var(--panel-2)', border: '1px solid var(--border)', padding: '10px', borderRadius: '6px' }}>
             {result}
           </pre>
         )}

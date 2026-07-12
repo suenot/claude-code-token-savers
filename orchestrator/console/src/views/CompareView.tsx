@@ -14,7 +14,6 @@ const TOOLS = [
   { id: 'cmdop', name: 'cmdop-claude', runtime: 'Python' },
   { id: 'graphify', name: 'graphify', runtime: 'Python' },
   { id: 'ccr', name: 'claude-code-router', runtime: 'Node' },
-  { id: 'litellm', name: 'LiteLLM', runtime: 'Python' },
   { id: 'headroom', name: 'headroom', runtime: 'Python' },
 ] as const;
 
@@ -55,9 +54,9 @@ const SECTIONS: Section[] = [
       {
         feature: 'Response / compression cache',
         hint: 'memoize LLM-billed outputs by content hash',
-        cells: { shuba: 'yes', litellm: 'yes' },
+        cells: { shuba: 'yes' },
       },
-      { feature: 'Rate limiting', hint: 'pace outbound requests', cells: { shuba: 'yes', litellm: 'yes' } },
+      { feature: 'Rate limiting', hint: 'pace outbound requests', cells: { shuba: 'yes' } },
       {
         feature: 'Chain proxies behind one BASE_URL',
         hint: 'layer several proxies instead of one owning ANTHROPIC_BASE_URL',
@@ -66,12 +65,12 @@ const SECTIONS: Section[] = [
       {
         feature: 'Provider / model routing',
         hint: 'translate to another provider or route by rule',
-        cells: { shuba: 'yes', ccr: 'yes', litellm: 'yes' },
+        cells: { shuba: 'yes', ccr: 'yes' },
       },
       {
         feature: "Cheap model for the tool's own work (off Claude's budget)",
         hint: 'internal use — compact-router / classifier / watchdog summaries (shuba), docs review (cmdop), graph extraction (graphify)',
-        cells: { shuba: 'yes', cmdop: 'yes', graphify: 'yes', ccr: 'partial', litellm: 'partial' },
+        cells: { shuba: 'yes', cmdop: 'yes', graphify: 'yes', ccr: 'partial' },
       },
     ],
   },
@@ -125,7 +124,7 @@ const SECTIONS: Section[] = [
     rows: [
       {
         feature: 'default route (main model)',
-        cells: { shuba: 'yes', ccr: 'yes', litellm: 'partial' },
+        cells: { shuba: 'yes', ccr: 'yes' },
       },
       {
         feature: 'background route (small/cheap for Claude Code bg calls)',
@@ -192,7 +191,7 @@ const SECTIONS: Section[] = [
     rows: [
       {
         feature: 'Console / dashboard UI',
-        cells: { shuba: 'yes', litellm: 'yes', ccr: 'partial', headroom: 'partial', cmdop: 'partial' },
+        cells: { shuba: 'yes', ccr: 'partial', headroom: 'partial', cmdop: 'partial' },
       },
       {
         feature: 'Live savings telemetry',
@@ -204,10 +203,10 @@ const SECTIONS: Section[] = [
 ];
 
 const MARK: Record<Cell, { text: string; color: string; label: string }> = {
-  yes: { text: '✓', color: '#2ecc71', label: 'built-in' },
-  partial: { text: '~', color: '#e0a800', label: 'partial / via a stage' },
-  planned: { text: '◐', color: '#3498db', label: 'planned in shuba' },
-  no: { text: '·', color: '#ccc', label: 'not offered' },
+  yes: { text: '✓', color: '#4ade80', label: 'built-in' },
+  partial: { text: '~', color: '#e0a13a', label: 'partial / via a stage' },
+  planned: { text: '◐', color: '#5a9bf0', label: 'planned in shuba' },
+  no: { text: '·', color: '#4a4a50', label: 'not offered' },
 };
 
 function Mark({ cell }: { cell: Cell }) {
@@ -221,13 +220,13 @@ function Mark({ cell }: { cell: Cell }) {
 
 const cellTd: React.CSSProperties = {
   padding: '5px 8px',
-  borderBottom: '1px solid #f0f0f0',
+  borderBottom: '1px solid var(--border-soft)',
   textAlign: 'center',
   fontSize: '0.9em',
 };
 const featTd: React.CSSProperties = {
   padding: '5px 8px',
-  borderBottom: '1px solid #f0f0f0',
+  borderBottom: '1px solid var(--border-soft)',
   fontSize: '0.82em',
   whiteSpace: 'nowrap',
 };
@@ -236,7 +235,7 @@ export function CompareView() {
   return (
     <>
       <Card title="shuba vs adjacent tools — feature matrix">
-        <p style={{ fontSize: '0.85em', color: '#555', marginTop: 0 }}>
+        <p style={{ fontSize: '0.85em', color: 'var(--muted)', marginTop: 0 }}>
           Columns are tools, rows are features. shuba is the <em>orchestrator</em>: it layers the single-purpose
           proxies (headroom) behind one <code>ANTHROPIC_BASE_URL</code> and adds a control MCP that ports
           cmdop-claude's task queue and graphify's native graph. The <strong>Project intelligence</strong> block is
@@ -247,20 +246,20 @@ export function CompareView() {
           <table style={{ borderCollapse: 'collapse', width: '100%', minWidth: '760px' }}>
             <thead>
               <tr>
-                <th style={{ ...featTd, textAlign: 'left', borderBottom: '2px solid #ccc' }}>feature</th>
+                <th style={{ ...featTd, textAlign: 'left', borderBottom: '2px solid var(--border)' }}>feature</th>
                 {TOOLS.map((t) => (
                   <th
                     key={t.id}
                     style={{
                       ...cellTd,
-                      borderBottom: '2px solid #ccc',
+                      borderBottom: '2px solid var(--border)',
                       fontSize: '0.78em',
-                      background: (('self' in t) && t.self) ? '#eafff2' : undefined,
+                      background: (('self' in t) && t.self) ? 'var(--accent-soft)' : undefined,
                     }}
                     title={t.runtime}
                   >
                     {t.name}
-                    <div style={{ fontWeight: 400, color: '#999', fontSize: '0.9em' }}>{t.runtime}</div>
+                    <div style={{ fontWeight: 400, color: 'var(--faint)', fontSize: '0.9em' }}>{t.runtime}</div>
                   </th>
                 ))}
               </tr>
@@ -275,9 +274,9 @@ export function CompareView() {
                         padding: '8px',
                         fontSize: '0.78em',
                         fontWeight: 700,
-                        color: '#444',
-                        background: '#f7f7f7',
-                        borderBottom: '1px solid #e0e0e0',
+                        color: 'var(--muted)',
+                        background: 'var(--panel-2)',
+                        borderBottom: '1px solid var(--border)',
                       }}
                     >
                       {section.title}
@@ -287,10 +286,10 @@ export function CompareView() {
                     <tr key={row.feature}>
                       <td style={featTd} title={row.hint}>
                         {row.feature}
-                        {row.hint && <span style={{ color: '#bbb' }}> ⓘ</span>}
+                        {row.hint && <span style={{ color: 'var(--faint)' }}> ⓘ</span>}
                       </td>
                       {TOOLS.map((t) => (
-                        <td key={t.id} style={{ ...cellTd, background: (('self' in t) && t.self) ? '#eafff2' : undefined }}>
+                        <td key={t.id} style={{ ...cellTd, background: (('self' in t) && t.self) ? 'var(--accent-soft)' : undefined }}>
                           <Mark cell={row.cells[t.id] ?? 'no'} />
                         </td>
                       ))}
@@ -301,7 +300,7 @@ export function CompareView() {
             </tbody>
           </table>
         </div>
-        <p style={{ fontSize: '0.8em', color: '#666', marginTop: '12px' }}>
+        <p style={{ fontSize: '0.8em', color: 'var(--muted)', marginTop: '12px' }}>
           <Mark cell="yes" /> built-in &nbsp;·&nbsp; <Mark cell="partial" /> partial / via a stage &nbsp;·&nbsp;{' '}
           <Mark cell="planned" /> planned in shuba &nbsp;·&nbsp; <Mark cell="no" /> not offered. Hover a feature (ⓘ) for
           detail. Cells reflect each tool's primary design intent, not a benchmark.
@@ -327,7 +326,7 @@ export function CompareView() {
             Stack all of the above behind one endpoint, with a task queue + graph in one process → <strong>shuba</strong>.
           </li>
         </ul>
-        <p style={{ fontSize: '0.8em', color: '#888', marginTop: '12px', marginBottom: 0 }}>
+        <p style={{ fontSize: '0.8em', color: 'var(--faint)', marginTop: '12px', marginBottom: 0 }}>
           Not affiliated with any listed project.
         </p>
       </Card>

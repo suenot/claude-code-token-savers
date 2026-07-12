@@ -49,7 +49,7 @@ export function ConfigView() {
           <button type="button" onClick={copy} style={{ marginBottom: '8px' }}>
             {copied ? 'Copied!' : 'Copy'}
           </button>
-          <pre style={{ whiteSpace: 'pre-wrap', background: '#f7f7f7', padding: '8px', borderRadius: '4px' }}>
+          <pre style={{ whiteSpace: 'pre-wrap', background: 'var(--panel-2)', border: '1px solid var(--border)', padding: '10px', borderRadius: '6px' }}>
             {pretty}
           </pre>
         </>

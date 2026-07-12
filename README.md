@@ -23,6 +23,29 @@ here in [`orchestrator/`](orchestrator/); also a standalone repo at
 [suenot/shuba](https://github.com/suenot/shuba). See
 [`orchestrator/README.md`](orchestrator/README.md).
 
+### shuba vs cmdop-claude, graphify & other tools
+
+Most tools here do **one** thing. shuba is the **orchestrator**: it layers the
+single-purpose compressors behind one `ANTHROPIC_BASE_URL`, and folds in a
+control MCP that ports the best ideas from cmdop-claude (task queue) and
+graphify (a native in-process graph) — so one process gives you chaining +
+tasks + graph instead of three disconnected runtimes. The same matrix is
+browsable live in the console's **Compare** tab.
+
+| tool | what it is | runtime | req. compression | chains proxies | cheap-model offload | task queue | knowledge graph | docs review / auto-fix | console |
+|---|---|---|:-:|:-:|:-:|:-:|:-:|:-:|:-:|
+| **shuba** | proxy-chain orchestrator + control MCP | Bun/TS | ~ | ✓ | ✓ | ✓ | ✓ | ✗ | ✓ |
+| [cmdop-claude](https://github.com/markolofsen/cmdop-claude) | self-maintaining `.claude` runtime (~$0.003/cycle, DeepSeek) | Python | ✗ | ✗ | ✓ | ✓ | ✗ | ✓ | ~ |
+| [graphify](https://github.com/safishamsi/graphify) | any input → queryable knowledge graph | Python | ✗ | ✗ | ✓ | ✗ | ✓ | ✗ | ✗ |
+| [claude-code-router](https://github.com/musistudio/claude-code-router) | route requests to alternate providers/models | Node | ~ | ✗ | ✓ | ✗ | ✗ | ✗ | ~ |
+| [LiteLLM](https://github.com/BerriAI/litellm) | generic multi-provider gateway | Python | ~ | ✗ | ✓ | ✗ | ✗ | ✗ | ✓ |
+| [headroom](https://headroom-docs.vercel.app/docs) | content-aware request compression | Python | ✓ | ✗ | ✗ | ✗ | ✗ | ✗ | ~ |
+| [pxpipe](https://github.com/teamchong/pxpipe) | render static request parts to dense PNGs | Node | ✓ | ✗ | ✗ | ✗ | ✗ | ✗ | ✓ |
+
+✓ built-in &nbsp;·&nbsp; ~ partial / via a stage &nbsp;·&nbsp; ✗ not offered. Cells reflect each tool's primary design intent, not a benchmark.
+
+**Pick by need:** want the whole request smaller → **headroom**/**pxpipe** (shuba runs them for you). Want docs kept accurate + auto-fix → **cmdop-claude**. Want to query a repo instead of reading it → **graphify** (shuba embeds a native reader). Want to swap providers → **claude-code-router**/**LiteLLM**. Want them stacked, with a task queue and graph in one process → **shuba**.
+
 ---
 
 ## 1. rtk — compress command output

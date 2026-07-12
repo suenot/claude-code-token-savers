@@ -8,8 +8,9 @@ import { SavingsView } from './views/SavingsView.tsx';
 import { RequestFeedView } from './views/RequestFeedView.tsx';
 import { MonitorsView } from './views/MonitorsView.tsx';
 import { TogglesView } from './views/TogglesView.tsx';
+import { CompareView } from './views/CompareView.tsx';
 
-const TABS = ['Chain', 'Harnesses', 'Jobs', 'Graph', 'Config', 'Savings', 'Requests', 'Monitors', 'Toggles'] as const;
+const TABS = ['Chain', 'Harnesses', 'Jobs', 'Graph', 'Config', 'Savings', 'Requests', 'Monitors', 'Toggles', 'Compare'] as const;
 type Tab = (typeof TABS)[number];
 
 function renderTab(tab: Tab) {
@@ -32,6 +33,8 @@ function renderTab(tab: Tab) {
       return <MonitorsView />;
     case 'Toggles':
       return <TogglesView />;
+    case 'Compare':
+      return <CompareView />;
     default:
       return null;
   }

@@ -59,6 +59,19 @@ export function getStats(): Promise<Stats> {
   return getJson<Stats>('/api/stats');
 }
 
+export type Savings = {
+  totalIn: number;
+  totalOut: number;
+  totalSaved: number;
+  requests: number;
+  byStage: Record<string, { in: number; out: number; saved: number; requests: number }>;
+};
+
+// getSavings fetches aggregated token-savings telemetry (GET /api/savings).
+export function getSavings(): Promise<Savings> {
+  return getJson<Savings>('/api/savings');
+}
+
 // getRequests fetches the most recent per-hop request-feed entries
 // (newest-first). The schema is loose so the return type is left as
 // unknown[] — callers must render defensively.

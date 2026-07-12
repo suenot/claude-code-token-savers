@@ -1,9 +1,59 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createGraph } from '../src/control/graph.ts';
+
+// Write a minimal graphify-out/graph.json under a fresh cwd and return the cwd.
+function cwdWithGraph(): string {
+  const cwd = mkdtempSync(join(tmpdir(), 'g-'));
+  mkdirSync(join(cwd, 'graphify-out'), { recursive: true });
+  const graph = {
+    nodes: [
+      { id: 'n1', label: 'AuthService', type: 'class' },
+      { id: 'n2', label: 'Database', type: 'class' },
+      { id: 'n3', label: 'login', type: 'function' },
+    ],
+    edges: [
+      { source: 'n1', target: 'n3', type: 'contains' },
+      { source: 'n3', target: 'n2', type: 'call' },
+    ],
+  };
+  writeFileSync(join(cwd, 'graphify-out', 'graph.json'), JSON.stringify(graph));
+  return cwd;
+}
+
+test('query: native engine answers from an existing graph.json without invoking the CLI', () => {
+  const cwd = cwdWithGraph();
+  const calls: unknown[] = [];
+  const execFileImpl = (file: string, args: string[]) => {
+    calls.push({ file, args });
+    return 'should-not-be-reached';
+  };
+
+  const result = createGraph({ cwd, execFileImpl }).query('AuthService');
+
+  assert.equal(calls.length, 0); // CLI never touched — zero tokens, no subprocess
+  assert.equal(result.ok, true);
+  assert.match(result.result, /AuthService/);
+});
+
+test('query: corrupt graph.json falls back to the CLI', () => {
+  const cwd = mkdtempSync(join(tmpdir(), 'g-'));
+  mkdirSync(join(cwd, 'graphify-out'), { recursive: true });
+  writeFileSync(join(cwd, 'graphify-out', 'graph.json'), 'not json{');
+  const calls: unknown[] = [];
+  const execFileImpl = (file: string, args: string[]) => {
+    calls.push({ file, args });
+    return 'canned-cli-output';
+  };
+
+  const result = createGraph({ cwd, execFileImpl }).query('foo');
+
+  assert.equal(calls.length, 1); // fell through to CLI
+  assert.deepEqual(result, { ok: true, result: 'canned-cli-output' });
+});
 
 test('query: explain form invokes graphify explain with --graph', () => {
   const cwd = mkdtempSync(join(tmpdir(), 'g-'));

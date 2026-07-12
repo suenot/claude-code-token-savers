@@ -2,6 +2,8 @@ import { existsSync, statSync, readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
 import { execFileSync, spawn, type ChildProcess } from 'node:child_process';
+import { loadGraph } from '../graph/load.ts';
+import { queryGraph } from '../graph/query.ts';
 
 /** Max files under cwd before autobuild refuses to run `extract` automatically. */
 export const MAX_AUTOBUILD_FILES = 500;
@@ -131,6 +133,25 @@ export function createGraph(opts: {
     // case that parsing ever changes.
     if (positionals.some((p) => p.startsWith('-'))) {
       return { ok: false, result: 'invalid query (leading dash)' };
+    }
+
+    // Native-first: when a prebuilt graph.json exists, answer it in-process via
+    // the ported TS engine (loadGraph + budgeted BFS/DFS traversal) — zero
+    // tokens, no subprocess, no LLM. Fall back to the graphify CLI only when the
+    // graph can't be loaded (missing/corrupt), preserving the prior behaviour
+    // for those cases.
+    if (existsSync(path)) {
+      try {
+        const index = loadGraph(JSON.parse(readFileSync(path, 'utf8')));
+        const question =
+          positionals.length === 2
+            ? `trace path from ${positionals[0]} to ${positionals[1]}`
+            : q;
+        const mode = positionals.length === 2 ? 'dfs' : 'auto';
+        return { ok: true, result: queryGraph(index, question, { mode }) };
+      } catch {
+        // Corrupt/unloadable graph — fall through to the CLI.
+      }
     }
 
     const args = positionals.length === 2 ? ['path', ...positionals] : ['explain', ...positionals];

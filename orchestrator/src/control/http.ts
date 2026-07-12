@@ -5,6 +5,7 @@ import { createHash } from 'node:crypto';
 import type { DelegateInput, JobStatus } from './types.ts';
 import { isStageEnabled, persistToggle, runtimePath, setToggle } from './toggles.ts';
 import { configPath } from '../config.ts';
+import { readSavings } from './reqlog.ts';
 
 type Engine = {
   delegate(input: DelegateInput): Promise<{ job_id: string; harness_chosen: string; model_chosen: string }>;
@@ -105,9 +106,9 @@ function isLoopbackOrigin(origin: string): boolean {
 // the next proxied request — no restart needed. headroom is a third-party
 // stage wired into the process tree at startup, so flipping its toggle only
 // takes effect after a restart.
-const KNOWN_STAGES = ['compact-router', 'context-watchdog', 'headroom', 'rate-limiter'] as const;
+const KNOWN_STAGES = ['compact-router', 'context-watchdog', 'dedup', 'headroom', 'rate-limiter'] as const;
 type KnownStage = (typeof KNOWN_STAGES)[number];
-const LIVE_STAGES = new Set<string>(['compact-router', 'context-watchdog', 'rate-limiter']);
+const LIVE_STAGES = new Set<string>(['compact-router', 'context-watchdog', 'dedup', 'rate-limiter']);
 
 function isKnownStage(value: unknown): value is KnownStage {
   return typeof value === 'string' && (KNOWN_STAGES as readonly string[]).includes(value);
@@ -300,6 +301,13 @@ export function createControlHttp(
       const parsedLimit = limitParam !== null ? Number.parseInt(limitParam, 10) : NaN;
       const limit = Number.isFinite(parsedLimit) && parsedLimit > 0 ? parsedLimit : undefined;
       sendJson(res, 200, await collector.hopLog(limit));
+      return;
+    }
+
+    if (method === 'GET' && pathname === '/api/savings') {
+      // Aggregate token-savings telemetry straight from the request log — no
+      // collector dependency, and readSavings never throws.
+      sendJson(res, 200, readSavings());
       return;
     }
 

@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, appendFileSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { appendReqLog, readReqLog, summarizeBody, type ReqLogEntry } from '../src/control/reqlog.ts';
+import { appendReqLog, readReqLog, readSavings, summarizeBody, type ReqLogEntry } from '../src/control/reqlog.ts';
 
 function tmpFile() {
   const dir = mkdtempSync(join(tmpdir(), 'shuba-reqlog-'));
@@ -49,6 +49,26 @@ test('summarizeBody extracts model/max_tokens/preview/bodySha', () => {
   assert.equal(result.maxTokens, 1);
   assert.equal(result.preview, 'quota');
   assert.match(result.bodySha, /^[0-9a-f]{8}$/);
+});
+
+test('readSavings aggregates token telemetry overall and per stage; ignores untagged entries', () => {
+  const path = tmpFile();
+  // Entries without token fields are ignored (a plain forward).
+  appendReqLog(entry({ stage: 'context-watchdog', action: 'forward' }), { path });
+  appendReqLog(
+    entry({ stage: 'context-watchdog', action: 'summarize', tokensIn: 1000, tokensOut: 400, tokensSaved: 600 }),
+    { path },
+  );
+  // tokensSaved omitted → derived from in-out.
+  appendReqLog(entry({ stage: 'dedup', action: 'dedup', tokensIn: 500, tokensOut: 300 }), { path });
+  const s = readSavings({ path });
+  assert.equal(s.requests, 2);
+  assert.equal(s.totalIn, 1500);
+  assert.equal(s.totalOut, 700);
+  assert.equal(s.totalSaved, 800);
+  assert.equal(s.byStage['context-watchdog']!.saved, 600);
+  assert.equal(s.byStage['dedup']!.saved, 200);
+  assert.equal(s.byStage['dedup']!.requests, 1);
 });
 
 test('appendReqLog caps file size by truncating before appending', () => {

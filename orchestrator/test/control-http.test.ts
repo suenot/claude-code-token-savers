@@ -449,20 +449,22 @@ function withTogglesServer(fn: (base: string, paths: { togglesPath: string; chai
   });
 }
 
-test('GET /api/toggles returns all 4 known stages with correct live/restartRequired flags', async () => {
+test('GET /api/toggles returns all known stages with correct live/restartRequired flags', async () => {
   await withTogglesServer(async (base) => {
     const res = await fetch(`${base}/api/toggles`);
     assert.equal(res.status, 200);
     const body: any = await res.json();
     assert.deepEqual(
       body.map((s: any) => s.id).sort(),
-      ['compact-router', 'context-watchdog', 'headroom', 'rate-limiter'],
+      ['compact-router', 'context-watchdog', 'dedup', 'headroom', 'rate-limiter'],
     );
     const byId = Object.fromEntries(body.map((s: any) => [s.id, s]));
     assert.equal(byId['compact-router'].live, true);
     assert.equal(byId['compact-router'].restartRequired, false);
     assert.equal(byId['context-watchdog'].live, true);
     assert.equal(byId['context-watchdog'].restartRequired, false);
+    assert.equal(byId['dedup'].live, true);
+    assert.equal(byId['dedup'].restartRequired, false);
     assert.equal(byId['rate-limiter'].live, true);
     assert.equal(byId['rate-limiter'].restartRequired, false);
     assert.equal(byId['headroom'].live, false);

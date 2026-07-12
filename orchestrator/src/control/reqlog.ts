@@ -12,16 +12,30 @@ import { createHash } from 'node:crypto';
 
 export type ReqLogEntry = {
   ts: string; // ISO
-  stage: string; // 'compact-router' | 'context-watchdog' | 'rate-limiter'
+  stage: string; // 'compact-router' | 'context-watchdog' | 'rate-limiter' | 'dedup'
   method: string;
   path: string;
   model?: string;
   maxTokens?: number;
-  action: 'forward' | 'intercept' | 'summarize' | 'passthrough';
+  action: 'forward' | 'intercept' | 'summarize' | 'passthrough' | 'dedup';
   upstreamStatus?: number;
   durationMs?: number;
   bodySha?: string; // short sha of raw body
   preview?: string; // <=80 chars of first user message content
+  // Savings telemetry (WS3): estimated request tokens before/after this stage's
+  // transform. `tokensSaved` is `tokensIn - tokensOut` and is only meaningful on
+  // an intercept/summarize/dedup action where the stage actually rewrote the body.
+  tokensIn?: number;
+  tokensOut?: number;
+  tokensSaved?: number;
+};
+
+export type SavingsSummary = {
+  totalIn: number;
+  totalOut: number;
+  totalSaved: number;
+  requests: number; // entries carrying token telemetry
+  byStage: Record<string, { in: number; out: number; saved: number; requests: number }>;
 };
 
 const DEFAULT_MAX_APPEND_BYTES = 5_000_000;
@@ -121,6 +135,39 @@ export function readReqLog(opts?: { path?: string; limit?: number; maxBytes?: nu
     return entries.reverse().slice(0, limit);
   } catch {
     return [];
+  }
+}
+
+// Aggregate token-savings telemetry over the tail of the request log. Reuses
+// readReqLog (bounded tail read) so this stays cheap and, like everything here,
+// never throws — a telemetry read must never break the console.
+export function readSavings(opts?: { path?: string; limit?: number; maxBytes?: number }): SavingsSummary {
+  const empty: SavingsSummary = { totalIn: 0, totalOut: 0, totalSaved: 0, requests: 0, byStage: {} };
+  try {
+    const entries = readReqLog({ ...opts, limit: opts?.limit ?? 5000 });
+    const summary: SavingsSummary = { totalIn: 0, totalOut: 0, totalSaved: 0, requests: 0, byStage: {} };
+    for (const e of entries) {
+      if (typeof e.tokensIn !== 'number' && typeof e.tokensOut !== 'number' && typeof e.tokensSaved !== 'number') {
+        continue;
+      }
+      const tin = e.tokensIn ?? 0;
+      const tout = e.tokensOut ?? 0;
+      const saved = e.tokensSaved ?? tin - tout;
+      summary.totalIn += tin;
+      summary.totalOut += tout;
+      summary.totalSaved += saved;
+      summary.requests += 1;
+      const stage = e.stage || 'unknown';
+      const bucket = summary.byStage[stage] ?? { in: 0, out: 0, saved: 0, requests: 0 };
+      bucket.in += tin;
+      bucket.out += tout;
+      bucket.saved += saved;
+      bucket.requests += 1;
+      summary.byStage[stage] = bucket;
+    }
+    return summary;
+  } catch {
+    return empty;
   }
 }
 

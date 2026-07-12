@@ -4,6 +4,7 @@ import type { StageDescriptor, BuildContext, BuildResult } from './types.ts';
 const COMPACT_BIN = fileURLToPath(new URL('../bin/compact-interceptor.ts', import.meta.url));
 const WATCHDOG_BIN = fileURLToPath(new URL('../bin/context-watchdog.ts', import.meta.url));
 const RATELIMIT_BIN = fileURLToPath(new URL('../bin/rate-limiter.ts', import.meta.url));
+const DEDUP_BIN = fileURLToPath(new URL('../bin/dedup.ts', import.meta.url));
 const CONTROL_BIN = fileURLToPath(new URL('../bin/shuba-control.ts', import.meta.url));
 
 export const REGISTRY: Record<string, StageDescriptor> = {
@@ -98,6 +99,24 @@ export const REGISTRY: Record<string, StageDescriptor> = {
           WATCHDOG_ENV_KEY: c.envKey || 'A8E_API_KEY',
           WATCHDOG_THRESHOLD: String(c.thresholdTokens ?? 300000),
           WATCHDOG_TAIL_TURNS: String(c.tailTurns ?? 6),
+        },
+      };
+    },
+  },
+  dedup: {
+    id: 'dedup',
+    builtin: true,
+    bin: process.execPath,
+    defaultPort: 47852,
+    dialect: 'anthropic',
+    terminal: false,
+    healthPath: '/health',
+    build({ port, upstreamBase }: BuildContext): BuildResult {
+      return {
+        args: [DEDUP_BIN],
+        env: {
+          PORT: String(port),
+          DEDUP_UPSTREAM: upstreamBase as string,
         },
       };
     },

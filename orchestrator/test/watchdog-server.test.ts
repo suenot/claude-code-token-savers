@@ -5,6 +5,7 @@ import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createWatchdog } from '../src/watchdog/server.ts';
+import { createCache } from '../src/cache/store.ts';
 
 // build an over-threshold body: many chars so estimateTokens > threshold(=10)
 const big = 'x'.repeat(200);
@@ -18,9 +19,14 @@ const overBody = () => ({
 });
 
 async function withServer(opts: any, fn: (base: string) => Promise<any>) {
+  // Isolate the persistent summary cache per server: a fresh temp dir so tests
+  // never hit the real ~/.shuba/cache or leak summaries into one another. A
+  // test may still override `summaryCache` via opts.
+  const cacheDir = mkdtempSync(join(tmpdir(), 'shuba-wd-cache-'));
   const srv = createWatchdog({
     port: 0, upstream: 'https://upstream.test', model: 'deepseek/deepseek-v4-flash',
-    baseUrl: 'https://ext.test/v1', apiKey: 'k', thresholdTokens: 10, tailTurns: 2, ...opts,
+    baseUrl: 'https://ext.test/v1', apiKey: 'k', thresholdTokens: 10, tailTurns: 2,
+    summaryCache: createCache({ dir: cacheDir }), ...opts,
   });
   srv.listen(0); await once(srv, 'listening');
   const address = srv.address();
@@ -55,6 +61,26 @@ test('over-threshold: summarizes once, forwards rewritten body; 2nd call hits ca
     await fetch(`${base}/v1/messages`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(overBody()) });
     assert.equal(extCalls.length, 1);
   });
+});
+
+test('persistent summary cache: a fresh watchdog instance reuses the prior summary (cross-restart)', async () => {
+  const extCalls: number[] = [];
+  const fetchImpl = async (url: string, opts?: any) => {
+    if (url.includes('ext.test')) { extCalls.push(1); return { ok: true, json: async () => ({ choices: [{ message: { content: 'SUM' } }] }) }; }
+    return { ok: true, status: 200, headers: new Headers(), body: null };
+  };
+  // Shared on-disk cache dir, but each server gets its OWN in-memory sticky Map
+  // (default) — so only the persistent cache can carry the summary across.
+  const sharedCache = createCache({ dir: mkdtempSync(join(tmpdir(), 'shuba-wd-shared-')) });
+  await withServer({ fetchImpl, summaryCache: sharedCache }, async (base: string) => {
+    await fetch(`${base}/v1/messages`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(overBody()) });
+  });
+  assert.equal(extCalls.length, 1);
+  // Second, independent server instance (simulating a restart) sharing the cache dir.
+  await withServer({ fetchImpl, summaryCache: sharedCache }, async (base: string) => {
+    await fetch(`${base}/v1/messages`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(overBody()) });
+  });
+  assert.equal(extCalls.length, 1); // no second summarize — served from persistent cache
 });
 
 test('compact-fingerprinted request passes through untouched', async () => {

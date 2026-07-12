@@ -7,6 +7,7 @@ import { planCut } from './cut.ts';
 import { summaryKey, buildRewrittenBody } from './rewrite.ts';
 import { appendReqLog, summarizeBody } from '../control/reqlog.ts';
 import { isStageEnabled } from '../control/toggles.ts';
+import { createCache, type Cache } from '../cache/store.ts';
 
 const STAGE_ID = 'context-watchdog';
 
@@ -17,7 +18,7 @@ const SUMMARIZE_PROMPT =
 const CACHE_CAP = 64;
 const SUMMARIZE_TIMEOUT_MS = 60000;
 
-export function createWatchdog({ port, upstream, model, baseUrl, apiKey, thresholdTokens, tailTurns, fetchImpl = fetch, cache = new Map() }: {
+export function createWatchdog({ port, upstream, model, baseUrl, apiKey, thresholdTokens, tailTurns, fetchImpl = fetch, cache = new Map(), summaryCache = createCache() }: {
   port: number;
   upstream: string;
   model: string;
@@ -27,6 +28,11 @@ export function createWatchdog({ port, upstream, model, baseUrl, apiKey, thresho
   tailTurns: number;
   fetchImpl?: typeof fetch;
   cache?: Map<string, any>;
+  // Persistent content-hash cache for LLM-produced summaries: an identical
+  // older-message prefix (same model) reuses its summary across restarts and
+  // sessions, so the summarization call is only ever billed once. Separate from
+  // `cache`, the in-memory sticky-cut reuse within a single live conversation.
+  summaryCache?: Cache;
 }): Server {
   const log = (...a: string[]) => process.stderr.write(`[context-watchdog] ${a.join(' ')}\n`);
 
@@ -47,7 +53,7 @@ export function createWatchdog({ port, upstream, model, baseUrl, apiKey, thresho
     return up.status || 200;
   }
 
-  async function summarize(older: any[], system: any) {
+  async function summarize(older: any[], system: any): Promise<string> {
     const oreq = anthropicToOpenAI({ system, messages: [...older, { role: 'user', content: SUMMARIZE_PROMPT }] }, model);
     const ac = new AbortController();
     const timer = setTimeout(() => ac.abort(), SUMMARIZE_TIMEOUT_MS);
@@ -91,9 +97,20 @@ export function createWatchdog({ port, upstream, model, baseUrl, apiKey, thresho
     const split = planCut(messages, tailTurns);
     if (!split) return null;
     const cut = split.older.length;
-    const summary = await summarize(split.older, body.system);
-    cacheSet(anchor, { olderHash: summaryKey(split.older), summary, cut });
-    log('summarized', anchor.slice(0, 8), 'cut', String(cut));
+    const olderHash = summaryKey(split.older);
+    // Persistent cache is keyed by model + prefix hash: an LLM output, so no
+    // algoVersion (content-only, never invalidated by a shuba release). A model
+    // change lands in a different slot without invalidating other models'.
+    const cacheKey = { namespace: 'watchdog-summary', content: `${model}\0${olderHash}` };
+    let summary = summaryCache.get(cacheKey);
+    if (summary === null) {
+      summary = await summarize(split.older, body.system);
+      summaryCache.set(cacheKey, summary);
+      log('summarized', anchor.slice(0, 8), 'cut', String(cut));
+    } else {
+      log('cache-hit', anchor.slice(0, 8), 'cut', String(cut));
+    }
+    cacheSet(anchor, { olderHash, summary, cut });
     return { cut, summary };
   }
 
@@ -110,7 +127,11 @@ export function createWatchdog({ port, upstream, model, baseUrl, apiKey, thresho
       if (isMessages) { try { body = JSON.parse(raw.toString('utf8')); } catch { body = null; } }
       const start = Date.now();
       const summary = isMessages ? summarizeBody(raw) : undefined;
-      function logReq(action: 'summarize' | 'forward', upstreamStatus?: number) {
+      function logReq(
+        action: 'summarize' | 'forward',
+        upstreamStatus?: number,
+        tokens?: { tokensIn: number; tokensOut: number },
+      ) {
         try {
           appendReqLog({
             ts: new Date().toISOString(),
@@ -121,6 +142,9 @@ export function createWatchdog({ port, upstream, model, baseUrl, apiKey, thresho
             upstreamStatus,
             durationMs: Date.now() - start,
             ...summary,
+            ...(tokens
+              ? { tokensIn: tokens.tokensIn, tokensOut: tokens.tokensOut, tokensSaved: tokens.tokensIn - tokens.tokensOut }
+              : {}),
           });
         } catch { /* logging must never affect the response path */ }
       }
@@ -131,8 +155,10 @@ export function createWatchdog({ port, upstream, model, baseUrl, apiKey, thresho
             if (r) {
               const tail = (body.messages || []).slice(r.cut);
               const rewritten = buildRewrittenBody(body, tail, r.summary);
+              const tokensIn = estimateTokens(body);
+              const tokensOut = estimateTokens(rewritten);
               const status = await forward(req, Buffer.from(JSON.stringify(rewritten)), res);
-              logReq('summarize', status);
+              logReq('summarize', status, { tokensIn, tokensOut });
               return;
             }
           } catch (e: any) {

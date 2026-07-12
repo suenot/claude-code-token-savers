@@ -89,6 +89,32 @@ test('scan skips plugins already flipped enabled:false', () => {
   });
 });
 
+test('scan skips a plugin that settings.json enabledPlugins sets to false, even if installed_plugins says enabled', () => {
+  withFixture(({ claudeRoot }) => {
+    writeFile(join(claudeRoot, 'plugins', 'installed_plugins.json'), JSON.stringify({
+      version: 2,
+      plugins: { 'p@mkt': [{ scope: 'user', installPath: '/x' }] },
+    }));
+    writeFile(join(claudeRoot, 'settings.json'), JSON.stringify({ enabledPlugins: { 'p@mkt': false } }));
+    const plugins = scan(claudeRoot).filter((c) => c.type === 'plugin');
+    assert.equal(plugins.length, 0);
+  });
+});
+
+test('scan reports a plugin as live when settings.json enabledPlugins sets it true (even if installed_plugins says disabled)', () => {
+  withFixture(({ claudeRoot }) => {
+    writeFile(join(claudeRoot, 'plugins', 'installed_plugins.json'), JSON.stringify({
+      version: 2,
+      plugins: { 'p@mkt': [{ scope: 'user', installPath: '/x', enabled: false }] },
+    }));
+    writeFile(join(claudeRoot, 'settings.json'), JSON.stringify({ enabledPlugins: { 'p@mkt': true } }));
+    const plugins = scan(claudeRoot).filter((c) => c.type === 'plugin');
+    assert.equal(plugins.length, 1);
+    assert.equal(plugins[0]!.id, 'plugin:p@mkt');
+    assert.equal(plugins[0]!.plugin?.settingsPath, join(claudeRoot, 'settings.json'));
+  });
+});
+
 test('scan tolerates a completely empty claude root', () => {
   withFixture(({ claudeRoot, projectCwd }) => {
     assert.deepEqual(scan(claudeRoot, projectCwd), []);

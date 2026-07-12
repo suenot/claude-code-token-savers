@@ -126,7 +126,41 @@ export function createCapabilities(deps: Deps = {}): CapabilitiesModule {
       for (const rec of records) rec.enabled = false;
       writeJsonFile(plugin.manifestPath, doc);
     }
-    return { pluginManifestPath: plugin.manifestPath };
+    // installed_plugins.json alone doesn't actually stop a plugin — Claude Code
+    // keeps loading its skills/agents/MCP until the enabledPlugins map in
+    // settings.json says false. Flip that too, preserving every other setting.
+    const settingsPath = plugin.settingsPath;
+    const settings = readJsonFile<Record<string, any>>(settingsPath, {});
+    const enabledPlugins =
+      settings.enabledPlugins && typeof settings.enabledPlugins === 'object' ? settings.enabledPlugins : {};
+    // Resolve the key: exact id match first, else any key whose part before '@'
+    // equals the bare plugin name; default to the plugin id when there's none.
+    let enabledKey = pluginKey;
+    let existed = false;
+    let prior: boolean | undefined;
+    if (pluginKey in enabledPlugins) {
+      enabledKey = pluginKey;
+      existed = true;
+      prior = enabledPlugins[pluginKey];
+    } else {
+      const found = Object.keys(enabledPlugins).find((k) => k.split('@')[0] === item.name);
+      if (found) {
+        enabledKey = found;
+        existed = true;
+        prior = enabledPlugins[found];
+      }
+    }
+    backupFile(settingsPath);
+    settings.enabledPlugins = enabledPlugins;
+    settings.enabledPlugins[enabledKey] = false;
+    writeJsonFile(settingsPath, settings);
+    return {
+      pluginManifestPath: plugin.manifestPath,
+      pluginSettingsPath: settingsPath,
+      pluginEnabledKey: enabledKey,
+      pluginEnabledExisted: existed,
+      ...(existed ? { pluginEnabledPrior: prior as boolean } : {}),
+    };
   }
 
   function importItem(item: ScannedCapability): CapabilityEntry {
@@ -218,6 +252,21 @@ export function createCapabilities(deps: Deps = {}): CapabilitiesModule {
         if (Array.isArray(records)) {
           for (const rec of records) delete rec.enabled;
           writeJsonFile(manifestPath, doc);
+        }
+      }
+      // Restore settings.json's enabledPlugins to its import-time state: put the
+      // prior value back if the key existed, otherwise remove the key we added.
+      const settingsPath = reversal.pluginSettingsPath;
+      const enabledKey = reversal.pluginEnabledKey;
+      if (settingsPath && enabledKey && existsSync(settingsPath)) {
+        const settings = readJsonFile<Record<string, any>>(settingsPath, {});
+        if (settings.enabledPlugins && typeof settings.enabledPlugins === 'object') {
+          if (reversal.pluginEnabledExisted) {
+            settings.enabledPlugins[enabledKey] = reversal.pluginEnabledPrior;
+          } else {
+            delete settings.enabledPlugins[enabledKey];
+          }
+          writeJsonFile(settingsPath, settings);
         }
       }
       rmSync(join(store.pluginsDir, safeSegment(id)), { recursive: true, force: true });

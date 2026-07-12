@@ -39,6 +39,14 @@ export type ReversalInfo = {
   mcpLocation?: 'top' | 'project';
   // plugin: the installed_plugins.json we flipped enabled:false in.
   pluginManifestPath?: string;
+  // plugin: Claude Code's REAL on/off switch is the enabledPlugins map in
+  // settings.json, so takeover also flips the plugin's key there to false. To
+  // eject cleanly we record which file + key we touched, whether that key
+  // already existed at import time, and (if so) its prior value.
+  pluginSettingsPath?: string;
+  pluginEnabledKey?: string;
+  pluginEnabledExisted?: boolean;
+  pluginEnabledPrior?: boolean;
 };
 
 export type CapabilityStore = {

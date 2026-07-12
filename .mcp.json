@@ -1,9 +1,9 @@
 {
   "mcpServers": {
     "shuba-control": {
-      "command": "bun",
+      "command": "/Users/suenot/.local/bin/shuba",
       "args": [
-        "/Users/suenot/projects/claude-code-token-savers/orchestrator/bin/shuba-control.ts"
+        "/$bunfs/bin/shuba-control.ts"
       ]
     }
   }

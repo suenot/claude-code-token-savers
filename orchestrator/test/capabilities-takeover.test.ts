@@ -156,6 +156,75 @@ test('plugin import disables it in installed_plugins.json (not uninstall) and ej
   });
 });
 
+test('plugin import flips settings.json enabledPlugins to false, writes .bak, records prior value; eject restores it', () => {
+  withWorld((w) => {
+    const installPath = join(w.claudeRoot, 'plugins', 'cache', 'mkt', 'p', '1.0.0');
+    writeFile(join(installPath, 'skills', 's', 'SKILL.md'), '---\nname: s\n---\n');
+    const manifestPath = join(w.claudeRoot, 'plugins', 'installed_plugins.json');
+    writeFile(manifestPath, JSON.stringify({ version: 2, plugins: { 'p@mkt': [{ scope: 'user', installPath }] } }));
+    const settingsPath = join(w.claudeRoot, 'settings.json');
+    writeFile(settingsPath, JSON.stringify({ model: 'opus', enabledPlugins: { 'p@mkt': true, 'other@mkt': true } }, null, 2));
+    const cap = make(w);
+    cap.importOne('plugin:p@mkt');
+    // settings.json: our key flipped false, the other left untouched, unrelated key preserved
+    let settings = JSON.parse(readFileSync(settingsPath, 'utf8'));
+    assert.equal(settings.enabledPlugins['p@mkt'], false);
+    assert.equal(settings.enabledPlugins['other@mkt'], true);
+    assert.equal(settings.model, 'opus');
+    // .bak snapshot of settings.json exists with the original (pre-flip) content
+    assert.ok(existsSync(`${settingsPath}.bak`));
+    assert.equal(JSON.parse(readFileSync(`${settingsPath}.bak`, 'utf8')).enabledPlugins['p@mkt'], true);
+    // eject restores the prior value (true) and leaves everything else intact
+    cap.eject('plugin:p@mkt');
+    settings = JSON.parse(readFileSync(settingsPath, 'utf8'));
+    assert.equal(settings.enabledPlugins['p@mkt'], true);
+    assert.equal(settings.enabledPlugins['other@mkt'], true);
+    assert.equal(settings.model, 'opus');
+  });
+});
+
+test('plugin import with no prior enabledPlugins key adds it; eject removes it (absent key stays absent)', () => {
+  withWorld((w) => {
+    const installPath = join(w.claudeRoot, 'plugins', 'cache', 'mkt', 'p', '1.0.0');
+    writeFile(join(installPath, 'skills', 's', 'SKILL.md'), '---\nname: s\n---\n');
+    const manifestPath = join(w.claudeRoot, 'plugins', 'installed_plugins.json');
+    writeFile(manifestPath, JSON.stringify({ version: 2, plugins: { 'p@mkt': [{ scope: 'user', installPath }] } }));
+    const settingsPath = join(w.claudeRoot, 'settings.json');
+    writeFile(settingsPath, JSON.stringify({ enabledPlugins: { 'other@mkt': true }, theme: 'dark' }, null, 2));
+    const cap = make(w);
+    cap.importOne('plugin:p@mkt');
+    let settings = JSON.parse(readFileSync(settingsPath, 'utf8'));
+    assert.equal(settings.enabledPlugins['p@mkt'], false);
+    // eject removes the key we added (it wasn't there before), other keys survive
+    cap.eject('plugin:p@mkt');
+    settings = JSON.parse(readFileSync(settingsPath, 'utf8'));
+    assert.equal('p@mkt' in settings.enabledPlugins, false);
+    assert.equal(settings.enabledPlugins['other@mkt'], true);
+    assert.equal(settings.theme, 'dark');
+  });
+});
+
+test('verify reports a plugin as leftover while settings.json still enables it', () => {
+  withWorld((w) => {
+    const installPath = join(w.claudeRoot, 'plugins', 'cache', 'mkt', 'p', '1.0.0');
+    writeFile(join(installPath, 'skills', 's', 'SKILL.md'), '---\nname: s\n---\n');
+    const manifestPath = join(w.claudeRoot, 'plugins', 'installed_plugins.json');
+    writeFile(manifestPath, JSON.stringify({ version: 2, plugins: { 'p@mkt': [{ scope: 'user', installPath }] } }));
+    const settingsPath = join(w.claudeRoot, 'settings.json');
+    writeFile(settingsPath, JSON.stringify({ enabledPlugins: { 'p@mkt': true } }, null, 2));
+    const cap = make(w);
+    cap.importOne('plugin:p@mkt');
+    // clean strip -> no leftovers
+    assert.equal(cap.verify().clean, true);
+    // Simulate a strip that only touched installed_plugins.json: settings.json
+    // re-enables the plugin. verify() must flag it as still living in CC.
+    writeFile(settingsPath, JSON.stringify({ enabledPlugins: { 'p@mkt': true } }, null, 2));
+    const v = cap.verify();
+    assert.equal(v.clean, false);
+    assert.deepEqual(v.leftovers.map((l) => l.id), ['plugin:p@mkt']);
+  });
+});
+
 test('verify reports clean after a full importAll and lists leftovers otherwise', () => {
   withWorld((w) => {
     writeFile(join(w.claudeRoot, 'skills', 'foo', 'SKILL.md'), '---\nname: foo\n---\n');

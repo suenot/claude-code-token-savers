@@ -18,9 +18,10 @@ export type ScannedCapability = {
   // mcp only: the server config object, the file it lives in, and its key —
   // enough for takeover to copy it out and rewrite the source JSON.
   mcp?: { config: unknown; configPath: string; serverKey: string };
-  // plugin only: the plugin manifest we'd flip enabled:false in, plus the
-  // cached skill/agent files that ship with the plugin (attributed to it).
-  plugin?: { manifestPath: string; cachedFiles: string[] };
+  // plugin only: the plugin manifest we'd flip enabled:false in, the
+  // settings.json whose enabledPlugins map is Claude Code's real on/off switch,
+  // plus the cached skill/agent files that ship with the plugin (attributed to it).
+  plugin?: { manifestPath: string; settingsPath: string; cachedFiles: string[] };
 };
 
 function expandHome(p: string): string {
@@ -195,6 +196,28 @@ function collectPluginFiles(installPath: string): string[] {
   return files;
 }
 
+// Read the enabledPlugins map out of settings.json — Claude Code's real plugin
+// on/off switch ({ "enabledPlugins": { "<name>@<marketplace>": true|false } }).
+// Tolerant of the file being absent or malformed.
+function readEnabledPlugins(path: string): Record<string, unknown> {
+  if (!existsSync(path)) return {};
+  try {
+    const parsed = JSON.parse(readFileSafe(path)) as { enabledPlugins?: unknown };
+    const ep = parsed?.enabledPlugins;
+    return ep && typeof ep === 'object' ? (ep as Record<string, unknown>) : {};
+  } catch {
+    return {};
+  }
+}
+
+// Resolve the enabledPlugins key for a plugin: exact "<id>" match first, else
+// any key whose part before '@' equals the plugin's bare name. Returns the key
+// (or undefined when the plugin has no entry there).
+function resolveEnabledKey(enabledPlugins: Record<string, unknown>, pluginId: string, name: string): string | undefined {
+  if (pluginId in enabledPlugins) return pluginId;
+  return Object.keys(enabledPlugins).find((k) => k.split('@')[0] === name);
+}
+
 // plugins: <claudeRoot>/plugins/installed_plugins.json (v2 shape:
 // { plugins: { "<id>": [ { installPath, ... } ] } }). Each plugin becomes one
 // capability whose cached skill/agent files are attributed to it.
@@ -210,15 +233,22 @@ function scanPlugins(claudeRoot: string): ScannedCapability[] {
   const out: ScannedCapability[] = [];
   const plugins = parsed?.plugins;
   if (!plugins || typeof plugins !== 'object') return [];
+  const settingsPath = join(claudeRoot, 'settings.json');
+  const enabledPlugins = readEnabledPlugins(settingsPath);
   for (const [pluginId, installs] of Object.entries(plugins)) {
     const records = Array.isArray(installs) ? installs : [];
-    // A plugin shuba has already taken over is flipped enabled:false in place
-    // (rather than uninstalled). Those no longer cost Claude context, so they
-    // are not "still living in Claude Code" — skip them.
-    if (records.length > 0 && records.every((r) => r?.enabled === false)) continue;
-    const installPath = records.find((i) => typeof i?.installPath === 'string')?.installPath;
     // Plugin id is "<name>@<marketplace>"; the bare name reads best.
     const name = pluginId.split('@')[0] ?? pluginId;
+    // A plugin is still "living in Claude Code" (a leftover) when settings.json
+    // enables it (enabledPlugins value === true), OR when it has no entry there
+    // and installed_plugins.json still counts it enabled. settings.json is the
+    // real switch: an explicit false means it's off regardless of the manifest.
+    const enabledKey = resolveEnabledKey(enabledPlugins, pluginId, name);
+    const settingsValue = enabledKey === undefined ? undefined : enabledPlugins[enabledKey];
+    const installedDisabled = records.length > 0 && records.every((r) => r?.enabled === false);
+    const live = settingsValue === true || (settingsValue === undefined && !installedDisabled);
+    if (!live) continue;
+    const installPath = records.find((i) => typeof i?.installPath === 'string')?.installPath;
     const cachedFiles = installPath ? collectPluginFiles(installPath) : [];
     out.push({
       id: `plugin:${pluginId}`,
@@ -226,7 +256,7 @@ function scanPlugins(claudeRoot: string): ScannedCapability[] {
       name,
       description: '',
       sourcePath: installPath ?? manifestPath,
-      plugin: { manifestPath, cachedFiles },
+      plugin: { manifestPath, settingsPath, cachedFiles },
     });
   }
   return out;

@@ -42,7 +42,7 @@ const BAR_WIDTH = 300;
 const BAR_HEIGHT = 16;
 
 // extractPct pulls a percentage-ish number out of a stage's arbitrary JSON
-// blob (pxpipe/headroom shapes are opaque to the console — see
+// blob (headroom shapes are opaque to the console — see
 // orchestrator/src/control/collector.ts). Falls back to 0 when no
 // recognizable field is present, so a stage still renders an (empty) bar
 // rather than being skipped.

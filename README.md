@@ -2,19 +2,18 @@
 
 A ready-made, **global** Claude Code setup to cut token spend — no API key required for any of it (graphify's semantic step runs on a cheap OpenRouter model, not your Claude budget).
 
-Five tools, every layer of the token bill:
+Four tools, every layer of the token bill:
 
 | tool | compresses | mechanism | needs |
 |---|---|---|---|
 | **[rtk](https://github.com/rtk-ai/rtk)** | command output (git/docker/pytest… −60–90%) | `PreToolUse` hook rewrites `git status` → `rtk git status` | brew |
 | **[caveman](https://github.com/JuliusBrussee/caveman)** | Claude's own output (~−65%, terse style) | plugin with its own `SessionStart` hook | Node ≥18 |
 | **graphify** (this repo bundles the setup) | replaces "read the whole repo" with a queryable knowledge graph; semantic extraction runs on **OpenRouter / deepseek**, not Claude tokens | skill + `SessionStart` auto-watch + headless build | [uv](https://docs.astral.sh/uv/) |
-| **[pxpipe](https://github.com/teamchong/pxpipe)** | the whole request — system prompt, tool docs, old history rendered to dense PNGs (~−59–70% input) | local proxy behind `ANTHROPIC_BASE_URL` | Node ≥18 |
 | **[headroom](https://github.com/headroomlabs-ai/headroom)** | request content — tool outputs, logs, RAG chunks, history via content-aware compressors (60–95% on JSON, 15–20% on coding) | local proxy / MCP / library | [uv](https://docs.astral.sh/uv/) or pip |
 
 Companion to the write-up: **[Saving tokens in LLMs — a practical Claude Code guide](https://www.suenot.com/blog/saving-tokens-llm/)**.
 
-**shuba** (this repo, [`orchestrator/`](orchestrator/)) is the piece that ties pxpipe, headroom, and
+**shuba** (this repo, [`orchestrator/`](orchestrator/)) is the piece that ties headroom and
 link-assistant/router together: only one process can own `ANTHROPIC_BASE_URL`
 at a time, so shuba starts the proxies you enable each on its own port, wires
 each one's upstream to the next, and launches `claude` against the head of
@@ -34,72 +33,72 @@ browsable live in the console's **Compare** tab.
 
 Columns are the tools, rows are features. `✓` built-in · `~` partial / via a stage · `◐` planned in shuba · `·` not offered. The same matrix is browsable live in the console's **Compare** tab.
 
-Tools: **shuba** (Bun/TS) · [cmdop-claude](https://github.com/markolofsen/cmdop-claude) (Python) · [graphify](https://github.com/safishamsi/graphify) (Python) · [claude-code-router](https://github.com/musistudio/claude-code-router) (Node) · [LiteLLM](https://github.com/BerriAI/litellm) (Python) · [headroom](https://headroom-docs.vercel.app/docs) (Python) · [pxpipe](https://github.com/teamchong/pxpipe) (Node).
+Tools: **shuba** (Bun/TS) · [cmdop-claude](https://github.com/markolofsen/cmdop-claude) (Python) · [graphify](https://github.com/safishamsi/graphify) (Python) · [claude-code-router](https://github.com/musistudio/claude-code-router) (Node) · [LiteLLM](https://github.com/BerriAI/litellm) (Python) · [headroom](https://headroom-docs.vercel.app/docs) (Python).
 
 **Request / proxy layer** — shrink input tokens before they hit the API:
 
-| feature | shuba | cmdop | graphify | ccr | litellm | headroom | pxpipe |
-|---|:-:|:-:|:-:|:-:|:-:|:-:|:-:|
-| Content-aware compression (JSON/code/prose) | ~ | · | · | · | · | ✓ | · |
-| Image/PNG request packing | ~ | · | · | · | · | · | ✓ |
-| Downscale request images (native, scale presets, default 1/2) | ✓ | · | · | · | · | · | · |
-| In-request dedup (identical blocks) | ✓ | · | · | · | · | · | · |
-| `/compact` routed to a cheap model | ✓ | · | · | · | · | · | · |
-| Auto-compact at a token threshold (default 300k) | ✓ | · | · | · | · | · | · |
-| Response / compression cache | ✓ | · | · | · | ✓ | · | · |
-| Rate limiting | ✓ | · | · | · | ✓ | · | · |
-| Chain proxies behind one `BASE_URL` | ✓ | · | · | · | · | · | · |
-| Provider / model routing | ✓ | · | · | ✓ | ✓ | · | · |
-| Cheap model for the tool's own work (off Claude's budget) | ✓ | ✓ | ✓ | ~ | ~ | · | · |
+| feature | shuba | cmdop | graphify | ccr | litellm | headroom |
+|---|:-:|:-:|:-:|:-:|:-:|:-:|
+| Content-aware compression (JSON/code/prose) | ~ | · | · | · | · | ✓ |
+| Downscale request images (native, scale presets, default 1/2) | ✓ | · | · | · | · | · |
+| In-request dedup (identical blocks) | ✓ | · | · | · | · | · |
+| `/compact` routed to a cheap model | ✓ | · | · | · | · | · |
+| Auto-compact at a token threshold (default 300k) | ✓ | · | · | · | · | · |
+| Response / compression cache | ✓ | · | · | · | ✓ | · |
+| Rate limiting | ✓ | · | · | · | ✓ | · |
+| Chain proxies behind one `BASE_URL` | ✓ | · | · | · | · | · |
+| Provider / model routing | ✓ | · | · | ✓ | ✓ | · |
+| Cheap model for the tool's own work (off Claude's budget) | ✓ | ✓ | ✓ | ~ | ~ | · |
 
 **Project intelligence / sidecar** — cmdop-claude's core idea: spend cents on a cheap model to keep docs/maps accurate so Claude Code's scarce context isn't spent on it:
 
-| feature | shuba | cmdop | graphify | ccr | litellm | headroom | pxpipe |
-|---|:-:|:-:|:-:|:-:|:-:|:-:|:-:|
-| Task queue injected into prompts | ✓ | ✓ | · | · | · | · | · |
-| Docs review (stale / contradiction / gaps) | ◐ | ✓ | · | · | · | · | · |
-| Docs auto-fix (LLM edits) | ◐ | ✓ | · | · | · | · | · |
-| Project map (dir annotations, SHA-cached) | ◐ | ✓ | · | · | · | · | · |
-| Rules system (lazy `paths:` frontmatter) | · | ✓ | · | · | · | · | · |
-| Docs search (FTS5 / semantic) | · | ✓ | · | · | · | · | · |
-| Knowledge graph (query instead of read) | ✓ | · | ✓ | · | · | · | · |
-| God nodes / community detection | ~ | · | ✓ | · | · | · | · |
+| feature | shuba | cmdop | graphify | ccr | litellm | headroom |
+|---|:-:|:-:|:-:|:-:|:-:|:-:|
+| Task queue injected into prompts | ✓ | ✓ | · | · | · | · |
+| Docs review (stale / contradiction / gaps) | ◐ | ✓ | · | · | · | · |
+| Docs auto-fix (LLM edits) | ◐ | ✓ | · | · | · | · |
+| Project map (dir annotations, SHA-cached) | ◐ | ✓ | · | · | · | · |
+| Rules system (lazy `paths:` frontmatter) | · | ✓ | · | · | · | · |
+| Docs search (FTS5 / semantic) | · | ✓ | · | · | · | · |
+| Knowledge graph (query instead of read) | ✓ | · | ✓ | · | · | · |
+| God nodes / community detection | ~ | · | ✓ | · | · | · |
 
 **Task-type model routing** — the claude-code-router / hermes pattern, native in shuba's `model-router` stage: classify each request and pick a model per category (all configurable under `modelRouter.routes`):
 
-| route | detected when | shuba | cmdop | graphify | ccr | litellm | headroom | pxpipe |
-|---|---|:-:|:-:|:-:|:-:|:-:|:-:|:-:|
-| `default` | anything else | ✓ | · | · | ✓ | ~ | · | · |
-| `background` | haiku-tier bg calls | ✓ | · | · | ✓ | · | · | · |
-| `think` | thinking/plan mode | ✓ | · | · | ✓ | · | · | · |
-| `longContext` | tokens > threshold (60k) | ✓ | · | · | ✓ | · | · | · |
-| `webSearch` | web_search tool present | ✓ | · | · | ✓ | · | · | · |
-| `image`/vision | request has images | ✓ | · | · | ✓ | · | · | · |
-| **Local OCR** for image reqs (no vision LLM) | request has images | ✓ | · | · | · | · | · | · |
+| route | detected when | shuba | cmdop | graphify | ccr | litellm | headroom |
+|---|---|:-:|:-:|:-:|:-:|:-:|:-:|
+| `default` | anything else | ✓ | · | · | ✓ | ~ | · |
+| `background` | haiku-tier bg calls | ✓ | · | · | ✓ | · | · |
+| `think` | thinking/plan mode | ✓ | · | · | ✓ | · | · |
+| `longContext` | tokens > threshold (60k) | ✓ | · | · | ✓ | · | · |
+| `webSearch` | web_search tool present | ✓ | · | · | ✓ | · | · |
+| `image`/vision | request has images | ✓ | · | · | ✓ | · | · |
+| `compact` | Claude Code `/compact` summarization | ✓ | · | · | · | · | · |
+| **Local OCR** for image reqs (no vision LLM) | request has images | ✓ | · | · | · | · | · |
 
-shuba already covered `compact` (compact-router) and `longContext` in-place compaction (context-watchdog); `model-router` adds the rest. The **Local OCR** row is unique: tesseract extracts text from screenshots (code/errors/logs) locally, injected as a text block — optionally dropping the pixels — so most "image analysis" never needs a vision model at all.
+`compact` and `longContext` predate `model-router`: `/compact` summarization is routed to a cheap model by the dedicated **compact-router** stage (its own model, default `a8e/a8e-1.0-pro`), and over-threshold requests are compacted in place by **context-watchdog** — so those two live in their own stages, while `model-router` adds `default`/`background`/`think`/`webSearch`/`image`. The **Local OCR** row is unique: tesseract extracts text from screenshots (code/errors/logs) locally, injected as a text block — optionally dropping the pixels — so most "image analysis" never needs a vision model at all.
 
 **Task delegation / routing** — offload whole tasks off Claude Code onto cheaper harnesses/models:
 
-| feature | shuba | cmdop | graphify | ccr | litellm | headroom | pxpipe |
-|---|:-:|:-:|:-:|:-:|:-:|:-:|:-:|
-| Trigger a cheap-model job from Claude via MCP | ✓ | ~ | · | · | · | · | · |
-| Delegate an **arbitrary** task to a sub-harness (`shuba_delegate`) | ✓ | · | · | · | · | · | · |
-| LLM-based model/harness routing (cheap classifier picks target) | ✓ | · | · | · | · | · | · |
-| Per-job git-worktree isolation | ✓ | · | · | · | · | · | · |
+| feature | shuba | cmdop | graphify | ccr | litellm | headroom |
+|---|:-:|:-:|:-:|:-:|:-:|:-:|
+| Trigger a cheap-model job from Claude via MCP | ✓ | ~ | · | · | · | · |
+| Delegate an **arbitrary** task to a sub-harness (`shuba_delegate`) | ✓ | · | · | · | · | · |
+| LLM-based model/harness routing (cheap classifier picks target) | ✓ | · | · | · | · | · |
+| Per-job git-worktree isolation | ✓ | · | · | · | · | · |
 
 cmdop's `~` is the key nuance: it *does* expose a cheap-model job to Claude over MCP — but only the fixed docs-review scan (`sidecar_scan`), not arbitrary task delegation. shuba's `shuba_delegate` hands off any task. Every other tool's cheap-model use is internal (invisible to Claude), which is why the old single "cheap-model offload" row was misleading and is now split three ways: internal use, MCP-triggered fixed job, and MCP arbitrary delegation.
 
 **Ops / visibility:**
 
-| feature | shuba | cmdop | graphify | ccr | litellm | headroom | pxpipe |
-|---|:-:|:-:|:-:|:-:|:-:|:-:|:-:|
-| Console / dashboard UI | ✓ | ~ | · | ~ | ✓ | ~ | ✓ |
-| Live savings telemetry | ✓ | · | · | · | · | ~ | ✓ |
+| feature | shuba | cmdop | graphify | ccr | litellm | headroom |
+|---|:-:|:-:|:-:|:-:|:-:|:-:|
+| Console / dashboard UI | ✓ | ~ | · | ~ | ✓ | ~ |
+| Live savings telemetry | ✓ | · | · | · | · | ~ |
 
 Cells reflect each tool's primary design intent, not a benchmark. Not affiliated with any listed project.
 
-**Pick by need:** whole request smaller → **headroom** (content) / **pxpipe** (images), which shuba runs for you. Keep docs accurate + auto-fix, project map, rules → **cmdop-claude** (shuba has the task queue today; docs review is `◐` planned). Query a repo instead of reading it → **graphify** (shuba embeds a native reader). Swap providers → **claude-code-router** / **LiteLLM**. Stack all of it behind one endpoint with a task queue and graph in one process → **shuba**.
+**Pick by need:** whole request smaller → **headroom** (content-aware compression), which shuba runs for you. Keep docs accurate + auto-fix, project map, rules → **cmdop-claude** (shuba has the task queue today; docs review is `◐` planned). Query a repo instead of reading it → **graphify** (shuba embeds a native reader). Swap providers → **claude-code-router** / **LiteLLM**. Stack all of it behind one endpoint with a task queue and graph in one process → **shuba**.
 
 > **Docs review / auto-fix is the next thing to port into shuba.** It's *not* the knowledge graph: the graph answers a repo query on demand, whereas cmdop's docs-review is a background sidecar that watches documentation on a cheap model (~$0.003/cycle) and only surfaces findings/edits — so Claude Code's limited context never pays to notice stale docs. Tracked as `◐` above.
 
@@ -147,23 +146,7 @@ Requires `OPENROUTER_API_KEY` in your environment. What `setup.sh` sets up:
 
 Full details: [`graphify/README.md`](graphify/README.md).
 
-## 4. pxpipe — render the request as images
-
-pxpipe is a local proxy that rewrites the bulky, static parts of each request (system prompt, tool docs, older history) into dense PNGs before they leave your machine. An image's token cost is fixed by its pixel size, not its char count — dense text packs ~3× more chars per token as an image than as text, so the request shrinks ~59–70% while the model reads it through the same vision channel it already uses for screenshots. Output streams untouched; only the request is compressed.
-
-It's a proxy, not a plugin — the integration is Claude Code's native `ANTHROPIC_BASE_URL`:
-
-```bash
-npm install -g pxpipe-proxy   # or run on demand: npx pxpipe-proxy
-pxpipe                                            # proxy on 127.0.0.1:47821
-ANTHROPIC_BASE_URL=http://127.0.0.1:47821 claude  # point Claude Code at it
-```
-
-Dashboard at <http://127.0.0.1:47821/>: tokens saved, every text→image conversion, live kill switch. Measures real `saved_pct` against a `count_tokens` counterfactual in `~/.pxpipe/events.jsonl`.
-
-> **Lossy — keep byte-exact values as text.** Exact hex/IDs/hashes/secrets can misread (and misses are silent confabulations, not errors). Recent turns stay text automatically; route verbatim work to a subagent on a non-allowlisted model (`CLAUDE_CODE_SUBAGENT_MODEL=claude-sonnet-4-6`). Best on the Fable 5 reader; Opus misreads imaged content, so it's opt-in.
-
-## 5. headroom — content-aware request compression
+## 4. headroom — content-aware request compression
 
 headroom compresses everything the agent *reads* — tool outputs, logs, RAG chunks, files, conversation history — with a content router that picks the right compressor per type (JSON, AST/code, prose) and caches originals for reversible retrieval. 60–95% on JSON payloads, ~15–20% on coding-agent traffic. Local-first; your data never leaves the machine.
 
@@ -190,8 +173,8 @@ SessionEnd          -> ~/.graphify/stop-watch.sh            # graphify: stop wat
 
 All take effect on the next Claude Code restart.
 
-**pxpipe and headroom are proxies, not hooks** — they sit between Claude Code and the API via `ANTHROPIC_BASE_URL` (pxpipe) or `headroom wrap claude` (headroom), so they don't appear in the hook map. Run whichever proxy you want in front; the hook-based tools above stack on top independently.
+**headroom is a proxy, not a hook** — it sits between Claude Code and the API via `headroom wrap claude`, so it doesn't appear in the hook map. Run it in front; the hook-based tools above stack on top independently.
 
 ## License
 
-MIT — see [LICENSE](LICENSE). Not affiliated with Anthropic, rtk, caveman, graphify, pxpipe, or headroom; this just wires existing OSS tools together.
+MIT — see [LICENSE](LICENSE). Not affiliated with Anthropic, rtk, caveman, graphify, or headroom; this just wires existing OSS tools together.

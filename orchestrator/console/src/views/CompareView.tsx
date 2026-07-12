@@ -16,7 +16,6 @@ const TOOLS = [
   { id: 'ccr', name: 'claude-code-router', runtime: 'Node' },
   { id: 'litellm', name: 'LiteLLM', runtime: 'Python' },
   { id: 'headroom', name: 'headroom', runtime: 'Python' },
-  { id: 'pxpipe', name: 'pxpipe', runtime: 'Node' },
 ] as const;
 
 type ToolId = (typeof TOOLS)[number]['id'];
@@ -32,11 +31,6 @@ const SECTIONS: Section[] = [
         feature: 'Content-aware compression',
         hint: 'compress JSON / code / prose in the request body',
         cells: { headroom: 'yes', shuba: 'partial' },
-      },
-      {
-        feature: 'Image/PNG request packing',
-        hint: 'render static request parts to dense PNGs (~−59–70% input)',
-        cells: { pxpipe: 'yes', shuba: 'partial' },
       },
       {
         feature: 'Downscale request images (native, scale presets)',
@@ -157,6 +151,11 @@ const SECTIONS: Section[] = [
         cells: { shuba: 'yes', ccr: 'yes' },
       },
       {
+        feature: 'compact route (/compact summarization to a cheap model)',
+        hint: 'handled by the dedicated compact-router stage (own model, default a8e)',
+        cells: { shuba: 'yes' },
+      },
+      {
         feature: 'Local OCR for image requests (no vision LLM)',
         hint: 'tesseract extracts text from screenshots; optionally drop the pixels — unique to shuba',
         cells: { shuba: 'yes' },
@@ -193,12 +192,12 @@ const SECTIONS: Section[] = [
     rows: [
       {
         feature: 'Console / dashboard UI',
-        cells: { shuba: 'yes', litellm: 'yes', pxpipe: 'yes', ccr: 'partial', headroom: 'partial', cmdop: 'partial' },
+        cells: { shuba: 'yes', litellm: 'yes', ccr: 'partial', headroom: 'partial', cmdop: 'partial' },
       },
       {
         feature: 'Live savings telemetry',
         hint: 'measured token savings, not estimates',
-        cells: { shuba: 'yes', pxpipe: 'yes', headroom: 'partial' },
+        cells: { shuba: 'yes', headroom: 'partial' },
       },
     ],
   },
@@ -239,7 +238,7 @@ export function CompareView() {
       <Card title="shuba vs adjacent tools — feature matrix">
         <p style={{ fontSize: '0.85em', color: '#555', marginTop: 0 }}>
           Columns are tools, rows are features. shuba is the <em>orchestrator</em>: it layers the single-purpose
-          proxies (headroom, pxpipe) behind one <code>ANTHROPIC_BASE_URL</code> and adds a control MCP that ports
+          proxies (headroom) behind one <code>ANTHROPIC_BASE_URL</code> and adds a control MCP that ports
           cmdop-claude's task queue and graphify's native graph. The <strong>Project intelligence</strong> block is
           cmdop-claude's core idea — spend cents on a cheap model to keep docs/maps accurate so Claude Code's scarce
           context is not spent on it; <Mark cell="planned" /> marks that landing in shuba next.
@@ -312,8 +311,7 @@ export function CompareView() {
       <Card title="Pick by need">
         <ul style={{ margin: 0, paddingLeft: '18px', fontSize: '0.85em', lineHeight: 1.55 }}>
           <li>
-            Whole request smaller → <strong>headroom</strong> (content) / <strong>pxpipe</strong> (images) — shuba runs
-            them for you.
+            Whole request smaller → <strong>headroom</strong> (content-aware compression) — shuba runs it for you.
           </li>
           <li>
             Keep docs accurate + auto-fix, project map, rules → <strong>cmdop-claude</strong> (shuba: task queue today,

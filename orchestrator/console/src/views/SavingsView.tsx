@@ -6,8 +6,8 @@ import { useInterval } from '../hooks/useInterval.ts';
 
 // SavedRows renders a "saved tokens" breakdown table (per-model or per-stage)
 // straight from the request-log savings summary. Sorted by saved desc.
-function SavedRows({ buckets }: { buckets: Record<string, { in: number; out: number; saved: number; requests: number }> }) {
-  const rows = Object.entries(buckets)
+function SavedRows({ buckets }: { buckets?: Record<string, { in: number; out: number; saved: number; requests: number }> }) {
+  const rows = Object.entries(buckets ?? {})
     .map(([name, b]) => ({ name, ...b }))
     .sort((a, b) => b.saved - a.saved);
   if (rows.length === 0) return <p>No measured savings yet.</p>;

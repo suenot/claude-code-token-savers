@@ -44,7 +44,7 @@ Tools: **shuba** (Bun/TS) · [cmdop-claude](https://github.com/markolofsen/cmdop
 | Image/PNG request packing | ~ | · | · | · | · | · | ✓ |
 | In-request dedup (identical blocks) | ✓ | · | · | · | · | · | · |
 | `/compact` routed to a cheap model | ✓ | · | · | · | · | · | · |
-| Pre-autocompact context watchdog | ✓ | · | · | · | · | · | · |
+| Auto-compact at a token threshold (default 300k) | ✓ | · | · | · | · | · | · |
 | Response / compression cache | ✓ | · | · | · | ✓ | · | · |
 | Rate limiting | ✓ | · | · | · | ✓ | · | · |
 | Chain proxies behind one `BASE_URL` | ✓ | · | · | · | · | · | · |
@@ -63,6 +63,14 @@ Tools: **shuba** (Bun/TS) · [cmdop-claude](https://github.com/markolofsen/cmdop
 | Docs search (FTS5 / semantic) | · | ✓ | · | · | · | · | · |
 | Knowledge graph (query instead of read) | ✓ | · | ✓ | · | · | · | · |
 | God nodes / community detection | ~ | · | ✓ | · | · | · | · |
+
+**Task delegation / routing** — offload whole tasks off Claude Code onto cheaper harnesses/models:
+
+| feature | shuba | cmdop | graphify | ccr | litellm | headroom | pxpipe |
+|---|:-:|:-:|:-:|:-:|:-:|:-:|:-:|
+| Delegate a task to a sub-harness via MCP (`shuba_delegate`) | ✓ | · | · | · | · | · | · |
+| LLM-based model/harness routing (cheap classifier picks target) | ✓ | · | · | · | · | · | · |
+| Per-job git-worktree isolation | ✓ | · | · | · | · | · | · |
 
 **Ops / visibility:**
 

@@ -49,8 +49,8 @@ const SECTIONS: Section[] = [
         cells: { shuba: 'yes' },
       },
       {
-        feature: 'Pre-autocompact context watchdog',
-        hint: 'rewrite over-threshold requests before Claude Code autocompacts',
+        feature: 'Auto-compact at a token threshold (default 300k)',
+        hint: 'context-watchdog summarizes the tail before Claude Code autocompacts; threshold configurable',
         cells: { shuba: 'yes' },
       },
       {
@@ -118,6 +118,26 @@ const SECTIONS: Section[] = [
         feature: 'God nodes / community detection',
         hint: 'most-connected entities, graph clustering',
         cells: { graphify: 'yes', shuba: 'partial' },
+      },
+    ],
+  },
+  {
+    title: 'Task delegation / routing (offload whole tasks off Claude Code)',
+    rows: [
+      {
+        feature: 'Delegate a task to a sub-harness via MCP',
+        hint: 'shuba_delegate: Claude Code hands a task to opencode/gemini/qwen/cursor-agent/claude',
+        cells: { shuba: 'yes' },
+      },
+      {
+        feature: 'LLM-based model/harness routing',
+        hint: 'a cheap classifier model (deepseek) picks {harness, model} per task from policy hints',
+        cells: { shuba: 'yes' },
+      },
+      {
+        feature: 'Per-job git-worktree isolation',
+        hint: 'run a delegated job in an isolated worktree so parallel edits do not collide',
+        cells: { shuba: 'yes' },
       },
     ],
   },

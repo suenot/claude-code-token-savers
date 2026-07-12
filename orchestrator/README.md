@@ -110,8 +110,11 @@ shuba status                  # sanity check: chain resolves, stages detected
 ```
 
 The console bundle is separate from the binary: after pulling console
-changes also run `bun run console:build` (output `console/dist` is served by
-shuba-control, not embedded in the binary).
+changes run `bun run console:install` — it builds the SPA and copies it to
+`~/.shuba/console`, where the compiled binary's shuba-control finds it
+(inside the binary `import.meta.url` is a virtual `$bunfs` path, so the
+source-relative `console/dist` only works when running from source; the
+lookup order is `$SHUBA_CONSOLE_DIST` → `console/dist` → `~/.shuba/console`).
 
 ### Mirror repo
 

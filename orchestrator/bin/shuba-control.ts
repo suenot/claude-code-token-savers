@@ -9,13 +9,29 @@ import { createTaskManager } from '../src/control/tasks.ts';
 import { createCapabilities } from '../src/capabilities/takeover.ts';
 import { createMcpGateway } from '../src/control/mcp-gateway.ts';
 import { join } from 'node:path';
+import { homedir } from 'node:os';
+import { existsSync } from 'node:fs';
 import { REGISTRY } from '../src/registry.ts';
 import type { DelegateConfig, Config } from '../src/types.ts';
 
-// console/dist is the built SPA (see `bun run console:build`); resolved
-// relative to this file so it works both run from source (bun bin/...) and
-// from an installed package layout.
-const CONSOLE_DIST = fileURLToPath(new URL('../console/dist', import.meta.url));
+// console/dist is the built SPA (see `bun run console:build`). Resolution
+// order: explicit env override; the source-relative path (works run from
+// source — in the compiled binary import.meta.url is a virtual $bunfs path
+// that never exists on disk, so it's skipped); the installed copy under
+// ~/.shuba/console (see `bun run console:install`). Missing everywhere is
+// fine — /api keeps working, only the SPA 404s.
+function resolveConsoleDist(): string {
+  const candidates = [
+    process.env.SHUBA_CONSOLE_DIST,
+    fileURLToPath(new URL('../console/dist', import.meta.url)),
+    join(homedir(), '.shuba', 'console'),
+  ];
+  for (const dir of candidates) {
+    if (dir && existsSync(join(dir, 'index.html'))) return dir;
+  }
+  return candidates[1]!;
+}
+const CONSOLE_DIST = resolveConsoleDist();
 
 // Default chain-stage health probes for the collector's GET /api/chain. These
 // mirror the ports/health paths declared in src/registry.ts for every stage

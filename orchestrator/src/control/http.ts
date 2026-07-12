@@ -36,6 +36,17 @@ type Tasks = {
   updateStatus(id: string, status: string): boolean;
 };
 
+// Capability takeover module (src/capabilities): scan/import/eject/toggle the
+// skills, agents, MCP servers and plugins shuba has lifted out of Claude Code.
+type Capabilities = {
+  scan(): unknown;
+  list(): unknown;
+  importOne(id: string): unknown;
+  importAll(): unknown;
+  eject(id: string): boolean;
+  toggle(id: string, enabled: boolean): boolean;
+};
+
 const SECRET_KEY_RE = /api[_-]?key|secret|token|password|passphrase|credential|bearer|private[_-]?key/i;
 
 // redactSecrets recursively walks a value and drops any object key whose
@@ -118,6 +129,7 @@ const KNOWN_STAGES = [
   'image-shrink',
   'model-router',
   'rate-limiter',
+  'skill-inject',
 ] as const;
 type KnownStage = (typeof KNOWN_STAGES)[number];
 const LIVE_STAGES = new Set<string>([
@@ -128,6 +140,7 @@ const LIVE_STAGES = new Set<string>([
   'image-shrink',
   'model-router',
   'rate-limiter',
+  'skill-inject',
 ]);
 
 function isKnownStage(value: unknown): value is KnownStage {
@@ -165,6 +178,7 @@ export function createControlHttp(
     togglesPath?: string;
     chainPath?: string;
     tasks?: Tasks;
+    capabilities?: Capabilities;
   },
 ): Server {
   const staticDir = opts?.staticDir;
@@ -172,6 +186,7 @@ export function createControlHttp(
   const collector = opts?.collector;
   const config = opts?.config;
   const tasks = opts?.tasks;
+  const capabilities = opts?.capabilities;
   const togglesPath = opts?.togglesPath ?? runtimePath();
   const chainPath = opts?.chainPath ?? configPath();
 
@@ -489,6 +504,100 @@ export function createControlHttp(
         return;
       }
       sendJson(res, 200, tasks.getTask(id));
+      return;
+    }
+
+    if (capabilities && method === 'GET' && pathname === '/api/capabilities') {
+      // Manifest of everything shuba holds, plus the "is Claude Code empty"
+      // verify result.
+      sendJson(res, 200, capabilities.list());
+      return;
+    }
+
+    if (capabilities && method === 'POST' && pathname === '/api/capabilities/scan') {
+      sendJson(res, 200, capabilities.scan());
+      return;
+    }
+
+    if (capabilities && method === 'POST' && pathname === '/api/capabilities/import') {
+      const contentType = req.headers['content-type'];
+      if (typeof contentType !== 'string' || !contentType.toLowerCase().startsWith('application/json')) {
+        sendJson(res, 415, { error: 'content-type must be application/json' });
+        return;
+      }
+      const raw = await readBody(req);
+      let body: { id?: unknown };
+      try {
+        body = raw.length > 0 ? JSON.parse(raw) : {};
+      } catch {
+        sendJson(res, 400, { error: 'invalid JSON body' });
+        return;
+      }
+      // Absent id = import everything scanned; a string id imports just that one.
+      if (typeof body.id === 'string') {
+        const imported = capabilities.importOne(body.id);
+        if (!imported) {
+          sendJson(res, 404, { error: 'capability not found' });
+          return;
+        }
+        sendJson(res, 200, imported);
+        return;
+      }
+      sendJson(res, 200, capabilities.importAll());
+      return;
+    }
+
+    if (capabilities && method === 'POST' && pathname === '/api/capabilities/eject') {
+      const contentType = req.headers['content-type'];
+      if (typeof contentType !== 'string' || !contentType.toLowerCase().startsWith('application/json')) {
+        sendJson(res, 415, { error: 'content-type must be application/json' });
+        return;
+      }
+      const raw = await readBody(req);
+      let body: { id?: unknown };
+      try {
+        body = raw.length > 0 ? JSON.parse(raw) : {};
+      } catch {
+        sendJson(res, 400, { error: 'invalid JSON body' });
+        return;
+      }
+      if (typeof body.id !== 'string') {
+        sendJson(res, 400, { error: 'id is required' });
+        return;
+      }
+      const ejected = capabilities.eject(body.id);
+      if (!ejected) {
+        sendJson(res, 404, { error: 'capability not found' });
+        return;
+      }
+      sendJson(res, 200, capabilities.list());
+      return;
+    }
+
+    if (capabilities && method === 'POST' && pathname === '/api/capabilities/toggle') {
+      const contentType = req.headers['content-type'];
+      if (typeof contentType !== 'string' || !contentType.toLowerCase().startsWith('application/json')) {
+        sendJson(res, 415, { error: 'content-type must be application/json' });
+        return;
+      }
+      const raw = await readBody(req);
+      let body: { id?: unknown; enabled?: unknown };
+      try {
+        body = raw.length > 0 ? JSON.parse(raw) : {};
+      } catch {
+        sendJson(res, 400, { error: 'invalid JSON body' });
+        return;
+      }
+      if (typeof body.id !== 'string' || typeof body.enabled !== 'boolean') {
+        sendJson(res, 400, { error: 'id (string) and enabled (boolean) are required' });
+        return;
+      }
+      const toggled = capabilities.toggle(body.id, body.enabled);
+      if (!toggled) {
+        sendJson(res, 404, { error: 'capability not found' });
+        return;
+      }
+      sendJson(res, 200, capabilities.list());
       return;
     }
 

@@ -527,7 +527,7 @@ test('GET /api/toggles returns all known stages with correct live/restartRequire
     const body: any = await res.json();
     assert.deepEqual(
       body.map((s: any) => s.id).sort(),
-      ['compact-router', 'context-watchdog', 'crush', 'dedup', 'headroom', 'image-shrink', 'model-router', 'rate-limiter'],
+      ['compact-router', 'context-watchdog', 'crush', 'dedup', 'headroom', 'image-shrink', 'model-router', 'rate-limiter', 'skill-inject'],
     );
     const byId = Object.fromEntries(body.map((s: any) => [s.id, s]));
     assert.equal(byId['compact-router'].live, true);
@@ -780,5 +780,159 @@ test('POST /api/tasks/:id updates status, 404s for unknown id, 400s for bad stat
       body: JSON.stringify({ status: 'bogus' }),
     });
     assert.equal(badStatus.status, 400);
+  });
+});
+
+function stubCapabilities() {
+  return {
+    calls: [] as any[],
+    imported: false,
+    scan() {
+      this.calls.push(['scan']);
+      return [{ id: 'skill:foo', type: 'skill', name: 'foo', description: '', sourcePath: '/x' }];
+    },
+    list() {
+      this.calls.push(['list']);
+      return { manifest: this.imported ? [{ id: 'skill:foo', type: 'skill' }] : [], verify: { clean: true, leftovers: [] } };
+    },
+    importOne(id: string) {
+      this.calls.push(['importOne', id]);
+      if (id !== 'skill:foo') return undefined;
+      this.imported = true;
+      return { id, type: 'skill', enabled: true };
+    },
+    importAll() {
+      this.calls.push(['importAll']);
+      this.imported = true;
+      return [{ id: 'skill:foo', type: 'skill', enabled: true }];
+    },
+    eject(id: string) {
+      this.calls.push(['eject', id]);
+      return id === 'skill:foo';
+    },
+    toggle(id: string, enabled: boolean) {
+      this.calls.push(['toggle', id, enabled]);
+      return id === 'skill:foo';
+    },
+  };
+}
+
+async function withCapabilitiesServer(fn: (base: string, cap: ReturnType<typeof stubCapabilities>) => Promise<void>) {
+  const engine = stubEngine();
+  const capabilities = stubCapabilities();
+  const server = createControlHttp(engine as any, { capabilities: capabilities as any });
+  await new Promise<void>((resolve) => server.listen(0, resolve));
+  const addr = server.address();
+  const port = typeof addr === 'object' && addr ? addr.port : 0;
+  const base = `http://127.0.0.1:${port}`;
+  try {
+    await fn(base, capabilities);
+  } finally {
+    server.close();
+  }
+}
+
+test('GET /api/capabilities is not registered without a capabilities collaborator', async () => {
+  await withServer(async (base) => {
+    const res = await fetch(`${base}/api/capabilities`);
+    assert.notEqual(res.status, 200);
+  });
+});
+
+test('GET /api/capabilities returns manifest + verify', async () => {
+  await withCapabilitiesServer(async (base, cap) => {
+    const res = await fetch(`${base}/api/capabilities`);
+    assert.equal(res.status, 200);
+    const body: any = await res.json();
+    assert.deepEqual(body.verify, { clean: true, leftovers: [] });
+    assert.deepEqual(cap.calls[0], ['list']);
+  });
+});
+
+test('POST /api/capabilities/scan routes to scan', async () => {
+  await withCapabilitiesServer(async (base, cap) => {
+    const res = await fetch(`${base}/api/capabilities/scan`, { method: 'POST' });
+    assert.equal(res.status, 200);
+    const body: any = await res.json();
+    assert.equal(body[0].id, 'skill:foo');
+    assert.deepEqual(cap.calls[0], ['scan']);
+  });
+});
+
+test('POST /api/capabilities/import with id imports one, unknown id 404s', async () => {
+  await withCapabilitiesServer(async (base, cap) => {
+    const ok = await fetch(`${base}/api/capabilities/import`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ id: 'skill:foo' }),
+    });
+    assert.equal(ok.status, 200);
+    assert.deepEqual(cap.calls[0], ['importOne', 'skill:foo']);
+
+    const missing = await fetch(`${base}/api/capabilities/import`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ id: 'skill:nope' }),
+    });
+    assert.equal(missing.status, 404);
+  });
+});
+
+test('POST /api/capabilities/import without id imports everything', async () => {
+  await withCapabilitiesServer(async (base, cap) => {
+    const res = await fetch(`${base}/api/capabilities/import`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({}),
+    });
+    assert.equal(res.status, 200);
+    assert.deepEqual(cap.calls[0], ['importAll']);
+  });
+});
+
+test('POST /api/capabilities/eject requires id, 404s for unknown, returns list on success', async () => {
+  await withCapabilitiesServer(async (base, cap) => {
+    const bad = await fetch(`${base}/api/capabilities/eject`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({}),
+    });
+    assert.equal(bad.status, 400);
+
+    const ok = await fetch(`${base}/api/capabilities/eject`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ id: 'skill:foo' }),
+    });
+    assert.equal(ok.status, 200);
+    const body: any = await ok.json();
+    assert.ok(body.verify);
+    assert.deepEqual(cap.calls[0], ['eject', 'skill:foo']);
+
+    const missing = await fetch(`${base}/api/capabilities/eject`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ id: 'skill:gone' }),
+    });
+    assert.equal(missing.status, 404);
+  });
+});
+
+test('POST /api/capabilities/toggle validates id + enabled', async () => {
+  await withCapabilitiesServer(async (base, cap) => {
+    const ok = await fetch(`${base}/api/capabilities/toggle`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ id: 'skill:foo', enabled: false }),
+    });
+    assert.equal(ok.status, 200);
+    assert.deepEqual(cap.calls[0], ['toggle', 'skill:foo', false]);
+
+    const bad = await fetch(`${base}/api/capabilities/toggle`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ id: 'skill:foo' }),
+    });
+    assert.equal(bad.status, 400);
   });
 });

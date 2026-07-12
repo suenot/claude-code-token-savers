@@ -160,6 +160,50 @@ test('outcome: crash — pre-spawn throw (createWorktree throws)', async () => {
   assert.equal(store.get(job.id)!.outcome, 'crash');
 });
 
+test('scope respected — all changed files inside globs → keep', async () => {
+  const store = createStore({ dir: mkdtempSync(join(tmpdir(),'r-')), now: () => 7 });
+  const job = store.create({ id:'', task:'t', harness:'gemini', model:null, cwd:'/repo', isolation:'worktree', scope:['src/**','test/**'] } as any);
+  const createWorktreeImpl = (() => ({ path: '/repo/.shuba-worktrees/x' })) as any;
+  const finalizeWorktreeImpl = (() => ({ diff: 'd', removed: false, files: ['src/a.ts', 'test/a.test.ts'] })) as any;
+  const runner = createRunner({ store, spawnImpl: fakeSpawn('', 0) as any, createWorktreeImpl, finalizeWorktreeImpl });
+  await runner.run(store.get(job.id)!);
+  assert.equal(store.get(job.id)!.status, 'done');
+  assert.equal(store.get(job.id)!.outcome, 'keep');
+});
+
+test('scope violation — a changed file matches no glob → scope-violation + offending paths logged', async () => {
+  const store = createStore({ dir: mkdtempSync(join(tmpdir(),'r-')), now: () => 7 });
+  const job = store.create({ id:'', task:'t', harness:'gemini', model:null, cwd:'/repo', isolation:'worktree', scope:['src/**'] } as any);
+  const createWorktreeImpl = (() => ({ path: '/repo/.shuba-worktrees/x' })) as any;
+  const finalizeWorktreeImpl = (() => ({ diff: 'd', removed: false, files: ['src/a.ts', 'secrets/creds.env'] })) as any;
+  const runner = createRunner({ store, spawnImpl: fakeSpawn('', 0) as any, createWorktreeImpl, finalizeWorktreeImpl });
+  await runner.run(store.get(job.id)!);
+  // status stays 'done' — outcome is the verdict layer, not a hard failure.
+  assert.equal(store.get(job.id)!.status, 'done');
+  assert.equal(store.get(job.id)!.outcome, 'scope-violation');
+  assert.match(store.readLog(job.id), /scope violation/);
+  assert.match(store.readLog(job.id), /secrets\/creds\.env/);
+});
+
+test('no scope → keep (back-compat)', async () => {
+  const store = createStore({ dir: mkdtempSync(join(tmpdir(),'r-')), now: () => 7 });
+  const job = store.create({ id:'', task:'t', harness:'gemini', model:null, cwd:'/repo', isolation:'worktree' } as any);
+  const createWorktreeImpl = (() => ({ path: '/repo/.shuba-worktrees/x' })) as any;
+  const finalizeWorktreeImpl = (() => ({ diff: 'd', removed: false, files: ['anywhere/x.ts'] })) as any;
+  const runner = createRunner({ store, spawnImpl: fakeSpawn('', 0) as any, createWorktreeImpl, finalizeWorktreeImpl });
+  await runner.run(store.get(job.id)!);
+  assert.equal(store.get(job.id)!.outcome, 'keep');
+});
+
+test('non-worktree job + scope → warning logged, outcome unchanged (keep)', async () => {
+  const store = createStore({ dir: mkdtempSync(join(tmpdir(),'r-')), now: () => 7 });
+  const job = store.create({ id:'', task:'t', harness:'gemini', model:null, cwd:'/r', isolation:'none', scope:['src/**'] } as any);
+  const runner = createRunner({ store, spawnImpl: fakeSpawn('', 0) as any });
+  await runner.run(store.get(job.id)!);
+  assert.equal(store.get(job.id)!.outcome, 'keep');
+  assert.match(store.readLog(job.id), /scope set but unverifiable/);
+});
+
 test('finalizeWorktree throws on close → run() still resolves, job terminal, error logged', async () => {
   const store = createStore({ dir: mkdtempSync(join(tmpdir(), 'r-')), now: () => 7 });
   const job = store.create({

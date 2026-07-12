@@ -64,6 +64,7 @@ export function createEngine(opts: {
         model,
         cwd: input.cwd ?? opts.projectCwd,
         isolation: input.isolation ?? opts.cfg.isolation ?? 'none',
+        scope: input.scope,
       });
       queue.push(job.id);
       pump();

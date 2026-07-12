@@ -24,6 +24,10 @@ export type JobRecord = {
   endedAt: number | null;
   exitCode: number | null;
   outcome?: JobOutcome;
+  // Allowed path globs (relative to cwd), e.g. ["src/**", "test/**"]. When set,
+  // the write-scope gate flags a clean run 'scope-violation' if it changed any
+  // file matching none of these globs. Absent/empty = no restriction.
+  scope?: string[];
   worktreePath?: string;
   error?: string;
 };
@@ -35,4 +39,5 @@ export type DelegateInput = {
   cwd?: string;
   files?: string[];
   isolation?: 'none' | 'worktree';
+  scope?: string[];
 };

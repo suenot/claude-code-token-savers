@@ -2,8 +2,16 @@ import { spawn as defaultSpawn } from 'node:child_process';
 import type { Store } from './store.ts';
 import type { HarnessAdapter } from './harnesses.ts';
 import { HARNESSES } from './harnesses.ts';
-import type { JobRecord } from './types.ts';
+import type { JobRecord, JobOutcome } from './types.ts';
 import { createWorktree, finalizeWorktree } from './worktree.ts';
+
+// Files matching none of the scope globs. A file is in scope if any glob
+// matches it (globs are relative to job.cwd, same as the changed paths git
+// reports). Bun.Glob is built in — no extra dependency.
+function filesOutsideScope(files: string[], scope: string[]): string[] {
+  const globs = scope.map((g) => new Bun.Glob(g));
+  return files.filter((f) => !globs.some((glob) => glob.match(f)));
+}
 
 export function createRunner(opts: {
   store: Store;
@@ -42,12 +50,12 @@ export function createRunner(opts: {
       // finalize info (removed=true means the diff was empty) so the caller can
       // classify the outcome; returns undefined when there was no worktree or
       // finalize threw, both of which we treat as "not removed".
-      const finalizeWorktreeSafe = (): { removed: boolean } | undefined => {
+      const finalizeWorktreeSafe = (): { removed: boolean; files: string[] } | undefined => {
         if (!worktreePath) return undefined;
         try {
-          const { diff, removed } = finalizeWorktreeImpl(job.cwd, worktreePath);
+          const { diff, removed, files } = finalizeWorktreeImpl(job.cwd, worktreePath);
           store.appendLog(job.id, `\n--- worktree diff (removed=${removed}) ---\n${diff}\n`);
-          return { removed };
+          return { removed, files };
         } catch (err) {
           const message = err instanceof Error ? err.message : String(err);
           store.appendLog(job.id, `\n--- finalize worktree error ---\n${message}\n`);
@@ -86,12 +94,34 @@ export function createRunner(opts: {
             // A clean exit whose worktree diff was empty (removed=true)
             // produced nothing worth keeping — classify it 'no-change' so the
             // eval loop can tell it apart from a real 'keep'.
-            const outcome =
+            let outcome: JobOutcome =
               code !== 0
                 ? 'discard'
                 : finalized?.removed
                   ? 'no-change'
                   : 'keep';
+            // Write-scope gate (clean exits only). We can only verify what the
+            // job wrote when it ran in an isolated worktree — that's the only
+            // path that gives us the changed-file list. A non-worktree job with
+            // a scope is unverifiable, so we warn rather than invent a verdict.
+            const scope = job.scope;
+            if (outcome === 'keep' && scope && scope.length > 0) {
+              if (finalized) {
+                const offenders = filesOutsideScope(finalized.files, scope);
+                if (offenders.length > 0) {
+                  outcome = 'scope-violation';
+                  store.appendLog(
+                    job.id,
+                    `\n--- scope violation: ${offenders.length} file(s) outside scope [${scope.join(', ')}] ---\n${offenders.join('\n')}\n`,
+                  );
+                }
+              } else {
+                store.appendLog(
+                  job.id,
+                  `\n--- scope set but unverifiable (non-worktree job); scope [${scope.join(', ')}] not enforced ---\n`,
+                );
+              }
+            }
             store.update(job.id, {
               exitCode: code,
               status: code === 0 ? 'done' : 'failed',

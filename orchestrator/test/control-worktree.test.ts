@@ -26,7 +26,8 @@ test('changed worktree → diff captured, not removed', () => {
   const { path } = createWorktree(d, 'job_2');
   writeFileSync(join(path, 'new.txt'), 'x');
   execSync('git add -A', { cwd: path, shell: '/bin/bash' });
-  const { diff, removed } = finalizeWorktree(d, path);
+  const { diff, removed, files } = finalizeWorktree(d, path);
   assert.match(diff, /new\.txt/);
   assert.equal(removed, false);
+  assert.deepEqual(files, ['new.txt']);
 });

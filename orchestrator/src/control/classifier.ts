@@ -1,6 +1,7 @@
 import type { DelegateInput } from './types.ts';
 import { HARNESSES } from './harnesses.ts';
 import { parseTarget } from './target.ts';
+import { resolveTarget } from './providers.ts';
 import type { DelegateConfig } from '../types.ts';
 
 export type { DelegateConfig } from '../types.ts';
@@ -25,8 +26,11 @@ async function classify(
   }
 
   const fetchImpl = opts.fetchImpl ?? (fetch as unknown as FetchLike);
-  const baseUrl = cfg.baseUrl ?? 'http://localhost:8080/v1';
-  const model = cfg.classifierModel ?? 'a8e-1.0-pro';
+  // classifierModel is a target string (provider/model); resolve it to the
+  // endpoint + model the classifier LLM call should use.
+  const t = resolveTarget(cfg.classifierModel ?? 'a8e/a8e-1.0-pro');
+  const baseUrl = cfg.baseUrl ?? t.baseUrl ?? 'http://localhost:8080/v1';
+  const model = t.model || 'a8e/a8e-1.0-pro';
 
   const hints = cfg.policy
     .map((p) => `- when: "${p.when}" -> harness: "${p.harness}", model: "${p.model}"`)

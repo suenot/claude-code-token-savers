@@ -1,5 +1,6 @@
 import { fileURLToPath } from 'node:url';
 import type { StageDescriptor, BuildContext, BuildResult } from './types.ts';
+import { resolveTarget } from './control/providers.ts';
 
 const COMPACT_BIN = fileURLToPath(new URL('../bin/compact-interceptor.ts', import.meta.url));
 const WATCHDOG_BIN = fileURLToPath(new URL('../bin/context-watchdog.ts', import.meta.url));
@@ -47,14 +48,15 @@ export const REGISTRY: Record<string, StageDescriptor> = {
     healthPath: '/health',
     build({ port, upstreamBase, config }: BuildContext): BuildResult {
       const c = (config && config.compactRouter) || {};
+      const r = resolveTarget(c.model || 'a8e/a8e-1.0-pro');
       return {
         args: [COMPACT_BIN],
         env: {
           PORT: String(port),
           COMPACT_UPSTREAM: upstreamBase as string,
-          COMPACT_MODEL: c.model || 'a8e/a8e-1.0-pro',
-          COMPACT_BASE_URL: c.baseUrl || 'http://localhost:8080/v1',
-          COMPACT_ENV_KEY: c.envKey || 'A8E_API_KEY',
+          COMPACT_MODEL: r.model,
+          COMPACT_BASE_URL: c.baseUrl || r.baseUrl || 'http://localhost:8080/v1',
+          COMPACT_ENV_KEY: c.envKey || r.envKey || 'A8E_API_KEY',
         },
       };
     },
@@ -91,14 +93,15 @@ export const REGISTRY: Record<string, StageDescriptor> = {
     healthPath: '/health',
     build({ port, upstreamBase, config }: BuildContext): BuildResult {
       const c = (config && config.contextWatchdog) || {};
+      const r = resolveTarget(c.model || 'a8e/a8e-1.0-pro');
       return {
         args: [WATCHDOG_BIN],
         env: {
           PORT: String(port),
           WATCHDOG_UPSTREAM: upstreamBase as string,
-          WATCHDOG_MODEL: c.model || 'a8e/a8e-1.0-pro',
-          WATCHDOG_BASE_URL: c.baseUrl || 'http://localhost:8080/v1',
-          WATCHDOG_ENV_KEY: c.envKey || 'A8E_API_KEY',
+          WATCHDOG_MODEL: r.model,
+          WATCHDOG_BASE_URL: c.baseUrl || r.baseUrl || 'http://localhost:8080/v1',
+          WATCHDOG_ENV_KEY: c.envKey || r.envKey || 'A8E_API_KEY',
           WATCHDOG_THRESHOLD: String(c.thresholdTokens ?? 300000),
           WATCHDOG_TAIL_TURNS: String(c.tailTurns ?? 6),
         },

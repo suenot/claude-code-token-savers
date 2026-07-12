@@ -1,6 +1,16 @@
 import { useEffect, useState } from 'react';
 import { getSettings, saveSettings, type Settings } from '../api.ts';
 import { Card } from '../components/Card.tsx';
+import { TogglesView } from './TogglesView.tsx';
+import { ConfigView } from './ConfigView.tsx';
+
+const sectionHeading: React.CSSProperties = {
+  margin: '20px 0 12px',
+  fontSize: '13px',
+  color: 'var(--muted)',
+  textTransform: 'uppercase',
+  letterSpacing: '0.06em',
+};
 
 // ---- generic path get/set on a nested settings object ----
 function getPath(obj: any, path: string[]): unknown {
@@ -38,21 +48,17 @@ const routeFields = (cat: string, extra: FieldSpec[] = []): FieldSpec[] => [
 const SECTIONS: SectionSpec[] = [
   {
     title: 'context-watchdog — proactive auto-compact',
-    note: 'Summarizes the tail before Claude Code autocompacts. thresholdTokens is the trigger (e.g. 300000 for 300k). Enable the stage in Toggles too.',
+    note: 'Summarizes the tail before Claude Code autocompacts. thresholdTokens is the trigger (e.g. 300000 for 300k). Enable the stage below in Stage toggles too.',
     fields: [
       { path: 'contextWatchdog.thresholdTokens', label: 'thresholdTokens', type: 'number', placeholder: '300000', hint: 'auto-compact at this many tokens' },
       { path: 'contextWatchdog.tailTurns', label: 'tailTurns', type: 'number', placeholder: '6' },
-      { path: 'contextWatchdog.model', label: 'model', type: 'text', placeholder: 'a8e/a8e-1.0-pro' },
-      { path: 'contextWatchdog.baseUrl', label: 'baseUrl', type: 'text' },
-      { path: 'contextWatchdog.envKey', label: 'envKey', type: 'text' },
+      { path: 'contextWatchdog.model', label: 'target', type: 'text', placeholder: 'a8e/a8e-1.0-pro', hint: 'provider/[subprovider/]model' },
     ],
   },
   {
     title: 'compact-router — /compact to a cheap model',
     fields: [
-      { path: 'compactRouter.model', label: 'model', type: 'text', placeholder: 'a8e/a8e-1.0-pro' },
-      { path: 'compactRouter.baseUrl', label: 'baseUrl', type: 'text' },
-      { path: 'compactRouter.envKey', label: 'envKey', type: 'text' },
+      { path: 'compactRouter.model', label: 'target', type: 'text', placeholder: 'a8e/a8e-1.0-pro', hint: 'provider/[subprovider/]model' },
     ],
   },
   {
@@ -75,9 +81,7 @@ const SECTIONS: SectionSpec[] = [
     note: 'One target string: harness/provider/[subprovider/]model — e.g. opencode/a8e/a8e-1.0-pro. Provider resolves its endpoint automatically (a8e, openrouter, anthropic, deepseek, openai).',
     fields: [
       { path: 'delegate.default', label: 'default target', type: 'text', placeholder: 'opencode/a8e/a8e-1.0-pro', hint: 'harness/provider/[subprovider/]model' },
-      { path: 'delegate.classifierModel', label: 'classifier model', type: 'text', placeholder: 'a8e-1.0-pro' },
-      { path: 'delegate.baseUrl', label: 'baseUrl', type: 'text' },
-      { path: 'delegate.envKey', label: 'envKey', type: 'text' },
+      { path: 'delegate.classifierModel', label: 'classifier target', type: 'text', placeholder: 'a8e/a8e-1.0-pro', hint: 'provider/[subprovider/]model' },
       { path: 'delegate.concurrency', label: 'concurrency', type: 'number' },
       { path: 'delegate.isolation', label: 'isolation', type: 'select', options: ['', 'none', 'worktree'] },
     ],
@@ -210,21 +214,23 @@ export function SettingsView() {
         </button>
       </div>
 
-      <h3 style={{ margin: '8px 0 12px', fontSize: '13px', color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-        Stages
-      </h3>
+      <h3 style={sectionHeading}>Stage toggles (live — no restart)</h3>
+      <TogglesView />
+
+      <h3 style={sectionHeading}>Stages</h3>
       {SECTIONS.map(renderSection)}
 
-      <h3 style={{ margin: '20px 0 12px', fontSize: '13px', color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-        Task-type model routes (model-router)
-      </h3>
+      <h3 style={sectionHeading}>Task-type model routes (model-router)</h3>
       {ROUTE_SECTIONS.map(renderSection)}
 
-      <div style={{ margin: '18px 0 40px' }}>
+      <div style={{ margin: '18px 0 24px' }}>
         <button type="button" className="btn" onClick={save} disabled={saving}>
           {saving ? 'Saving…' : 'Save settings'}
         </button>
       </div>
+
+      <h3 style={sectionHeading}>Raw config (read-only)</h3>
+      <ConfigView />
     </>
   );
 }

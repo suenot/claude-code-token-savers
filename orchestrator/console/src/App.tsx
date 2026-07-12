@@ -6,11 +6,9 @@ import { ChainView } from './views/ChainView.tsx';
 import { HarnessView } from './views/HarnessView.tsx';
 import { JobsView } from './views/JobsView.tsx';
 import { GraphView } from './views/GraphView.tsx';
-import { ConfigView } from './views/ConfigView.tsx';
 import { SavingsView } from './views/SavingsView.tsx';
 import { RequestFeedView } from './views/RequestFeedView.tsx';
 import { MonitorsView } from './views/MonitorsView.tsx';
-import { TogglesView } from './views/TogglesView.tsx';
 import { CompareView } from './views/CompareView.tsx';
 import { SettingsView } from './views/SettingsView.tsx';
 
@@ -31,9 +29,7 @@ const GROUPS: Group[] = [
     icon: 'chain',
     tabs: [
       { id: 'chain', label: 'Chain', icon: 'chain', title: 'Chain', sub: 'The proxy stages currently wired behind ANTHROPIC_BASE_URL.', render: () => <ChainView /> },
-      { id: 'settings', label: 'Settings', icon: 'settings', title: 'Settings', sub: 'Models per task type, stage thresholds, delegation — written to chain.json.', render: () => <SettingsView /> },
-      { id: 'toggles', label: 'Toggles', icon: 'toggles', title: 'Toggles', sub: 'Flip stages on or off at runtime — no restart for live stages.', render: () => <TogglesView /> },
-      { id: 'config', label: 'Config', icon: 'config', title: 'Config', sub: 'The raw resolved shuba configuration (read-only, secrets redacted).', render: () => <ConfigView /> },
+      { id: 'settings', label: 'Settings', icon: 'settings', title: 'Settings', sub: 'Stage toggles, models per task type, thresholds, delegation, raw config.', render: () => <SettingsView /> },
     ],
   },
   {

@@ -114,6 +114,19 @@ export function getConfig(): Promise<Record<string, unknown>> {
   return getJson<Record<string, unknown>>('/api/config');
 }
 
+export type Settings = Record<string, any>;
+export type SettingsResponse = { settings: Settings; restartRequired: boolean };
+
+// getSettings / saveSettings edit the whitelisted config sections in chain.json
+// (stage models, thresholds, routes). Changes persist but need a `shuba run`
+// restart to take effect (restartRequired is always true).
+export function getSettings(): Promise<SettingsResponse> {
+  return getJson<SettingsResponse>('/api/settings');
+}
+export function saveSettings(settings: Settings): Promise<SettingsResponse> {
+  return postJson<SettingsResponse>('/api/settings', settings);
+}
+
 // getToggles fetches the live/config-enabled state of every known shuba
 // chain stage (see orchestrator/src/control/toggles.ts).
 export function getToggles(): Promise<ToggleRow[]> {

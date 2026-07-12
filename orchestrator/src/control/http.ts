@@ -6,6 +6,7 @@ import type { DelegateInput, JobStatus } from './types.ts';
 import { isStageEnabled, persistToggle, runtimePath, setToggle } from './toggles.ts';
 import { configPath } from '../config.ts';
 import { readSavings } from './reqlog.ts';
+import { readSettings, writeSettings } from './settings-store.ts';
 
 type Engine = {
   delegate(input: DelegateInput): Promise<{ job_id: string; harness_chosen: string; model_chosen: string }>;
@@ -362,6 +363,32 @@ export function createControlHttp(
       setToggle(stage, enabled, togglesPath);
       persistToggle(stage, enabled, chainPath);
       sendJson(res, 200, togglesView(togglesPath));
+      return;
+    }
+
+    if (method === 'GET' && pathname === '/api/settings') {
+      sendJson(res, 200, { settings: readSettings(chainPath), restartRequired: true });
+      return;
+    }
+
+    if (method === 'POST' && pathname === '/api/settings') {
+      const contentType = req.headers['content-type'];
+      if (typeof contentType !== 'string' || !contentType.toLowerCase().startsWith('application/json')) {
+        sendJson(res, 415, { error: 'content-type must be application/json' });
+        return;
+      }
+      const raw = await readBody(req);
+      let body: unknown;
+      try {
+        body = raw.length > 0 ? JSON.parse(raw) : {};
+      } catch {
+        sendJson(res, 400, { error: 'invalid JSON body' });
+        return;
+      }
+      // Only the whitelisted config sections are written; unrelated chain.json
+      // keys are preserved. Takes effect on the next `shuba run`.
+      const saved = writeSettings(body, chainPath);
+      sendJson(res, 200, { settings: saved, restartRequired: true });
       return;
     }
 

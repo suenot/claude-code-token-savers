@@ -12,6 +12,7 @@ import { RequestFeedView } from './views/RequestFeedView.tsx';
 import { MonitorsView } from './views/MonitorsView.tsx';
 import { TogglesView } from './views/TogglesView.tsx';
 import { CompareView } from './views/CompareView.tsx';
+import { SettingsView } from './views/SettingsView.tsx';
 
 type Tab = {
   id: string;
@@ -30,8 +31,9 @@ const GROUPS: Group[] = [
     icon: 'chain',
     tabs: [
       { id: 'chain', label: 'Chain', icon: 'chain', title: 'Chain', sub: 'The proxy stages currently wired behind ANTHROPIC_BASE_URL.', render: () => <ChainView /> },
+      { id: 'settings', label: 'Settings', icon: 'settings', title: 'Settings', sub: 'Models per task type, stage thresholds, delegation — written to chain.json.', render: () => <SettingsView /> },
       { id: 'toggles', label: 'Toggles', icon: 'toggles', title: 'Toggles', sub: 'Flip stages on or off at runtime — no restart for live stages.', render: () => <TogglesView /> },
-      { id: 'config', label: 'Config', icon: 'config', title: 'Config', sub: 'The resolved shuba configuration (secrets redacted).', render: () => <ConfigView /> },
+      { id: 'config', label: 'Config', icon: 'config', title: 'Config', sub: 'The raw resolved shuba configuration (read-only, secrets redacted).', render: () => <ConfigView /> },
     ],
   },
   {
@@ -63,8 +65,17 @@ const GROUPS: Group[] = [
 
 const ALL_TABS = GROUPS.flatMap((g) => g.tabs);
 
+function initialTab(): string {
+  const hash = typeof location !== 'undefined' ? location.hash.replace('#', '') : '';
+  return ALL_TABS.some((t) => t.id === hash) ? hash : ALL_TABS[0].id;
+}
+
 export function App() {
-  const [activeId, setActiveId] = useState<string>(ALL_TABS[0].id);
+  const [activeId, setActiveIdRaw] = useState<string>(initialTab);
+  const setActiveId = (id: string) => {
+    setActiveIdRaw(id);
+    if (typeof location !== 'undefined') location.hash = id;
+  };
   const { theme, toggle } = useTheme();
   const active = ALL_TABS.find((t) => t.id === activeId) ?? ALL_TABS[0];
   const activeGroup = GROUPS.find((g) => g.tabs.some((t) => t.id === activeId)) ?? GROUPS[0];

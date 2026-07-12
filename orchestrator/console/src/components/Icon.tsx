@@ -6,6 +6,7 @@ import {
   Link2,
   SlidersHorizontal,
   Settings,
+  Wrench,
   Activity,
   List,
   MonitorDot,
@@ -19,6 +20,7 @@ import {
 
 const ICONS: Record<string, LucideIcon> = {
   chain: Link2,
+  settings: Wrench,
   toggles: SlidersHorizontal,
   config: Settings,
   usage: Activity,

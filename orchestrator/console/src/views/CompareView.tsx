@@ -320,7 +320,7 @@ export function CompareView() {
             Query a repo instead of reading it → <strong>graphify</strong> (shuba embeds a native reader).
           </li>
           <li>
-            Swap providers / route by model → <strong>claude-code-router</strong> / <strong>LiteLLM</strong>.
+            Swap providers / route by model → <strong>claude-code-router</strong>.
           </li>
           <li>
             Stack all of the above behind one endpoint, with a task queue + graph in one process → <strong>shuba</strong>.

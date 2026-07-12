@@ -66,7 +66,9 @@ export function sanitizeSettings(input: unknown): Settings {
   if (Object.keys(routes).length > 0) out.modelRouter = { routes };
 
   const del = (o.delegate as Dict) ?? {};
-  const delDefault = nonEmpty(pick((del.default as Dict) ?? {}, { harness: str, model: str }));
+  const delDefault = nonEmpty(
+    pick((del.default as Dict) ?? {}, { harness: str, provider: str, subprovider: str, model: str }),
+  );
   const delegate = pick(del, { classifierModel: str, baseUrl: str, envKey: str, concurrency: num, isolation: str });
   if (delDefault) delegate.default = delDefault;
   if (Object.keys(delegate).length > 0) out.delegate = delegate;

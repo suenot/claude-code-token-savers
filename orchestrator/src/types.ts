@@ -23,7 +23,11 @@ export type StageDescriptor = {
 export type DelegateConfig = {
   concurrency?: number;
   isolation?: 'none' | 'worktree';
-  default: { harness: string; model: string };
+  // A delegate target is harness + a model path. The model path is
+  // provider/[subprovider/]model — e.g. openrouter/deepseek/a8e-1.0-pro — where
+  // subprovider is optional (openrouter routes through it). provider/subprovider
+  // are optional; if absent the bare model is used (back-compat).
+  default: { harness: string; provider?: string; subprovider?: string; model: string };
   policy?: Array<{ when: string; harness: string; model: string }>;
   baseUrl?: string;
   classifierModel?: string;

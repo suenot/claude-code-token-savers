@@ -89,6 +89,19 @@ Respond with ONLY a strict JSON object of the form {"harness":"<harness>","model
   }
 }
 
+// composeModel joins a delegate target's provider/subprovider/model into the
+// single model path a harness expects (e.g. opencode's `-m` flag). Blank parts
+// are dropped, so a config with only `model` still yields just the model.
+export function composeModel(t: { provider?: string; subprovider?: string; model?: string }): string {
+  return [t.provider, t.subprovider, t.model].filter((v): v is string => typeof v === 'string' && v.length > 0).join('/');
+}
+
+// defaultTarget flattens cfg.default (harness + provider/subprovider/model) to
+// the {harness, model} pair the runner consumes.
+function defaultTarget(cfg: DelegateConfig): { harness: string; model: string } {
+  return { harness: cfg.default.harness, model: composeModel(cfg.default) };
+}
+
 export async function selectHarnessModel(
   input: DelegateInput,
   cfg: DelegateConfig,
@@ -98,15 +111,17 @@ export async function selectHarnessModel(
     return { harness: input.harness, model: input.model };
   }
 
+  const fallback = defaultTarget(cfg);
+
   if (input.harness === undefined && input.model === undefined) {
     const result = await classify(input, cfg, opts ?? {});
-    return result ?? cfg.default;
+    return result ?? fallback;
   }
 
   // Exactly one of harness/model is set: fill the missing one.
   const result = await classify(input, cfg, opts ?? {});
   return {
-    harness: input.harness ?? result?.harness ?? cfg.default.harness,
-    model: input.model ?? result?.model ?? cfg.default.model,
+    harness: input.harness ?? result?.harness ?? fallback.harness,
+    model: input.model ?? result?.model ?? fallback.model,
   };
 }

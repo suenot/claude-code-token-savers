@@ -74,9 +74,12 @@ const SECTIONS: SectionSpec[] = [
   },
   {
     title: 'delegate — task offload defaults',
+    note: 'Target = harness / provider / subprovider (optional) / model. The model path sent to the harness is provider/[subprovider/]model — e.g. openrouter/deepseek/a8e-1.0-pro.',
     fields: [
       { path: 'delegate.default.harness', label: 'default harness', type: 'text', placeholder: 'opencode' },
-      { path: 'delegate.default.model', label: 'default model', type: 'text', placeholder: 'deepseek/deepseek-v4-flash' },
+      { path: 'delegate.default.provider', label: 'default provider', type: 'text', placeholder: 'openrouter', hint: 'optional' },
+      { path: 'delegate.default.subprovider', label: 'default subprovider', type: 'text', placeholder: 'deepseek', hint: 'optional — for openrouter' },
+      { path: 'delegate.default.model', label: 'default model', type: 'text', placeholder: 'a8e-1.0-pro' },
       { path: 'delegate.classifierModel', label: 'classifier model', type: 'text', placeholder: 'deepseek/deepseek-v4-flash' },
       { path: 'delegate.baseUrl', label: 'baseUrl', type: 'text' },
       { path: 'delegate.envKey', label: 'envKey', type: 'text' },

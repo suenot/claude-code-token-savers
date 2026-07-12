@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react';
 import { getSettings, saveSettings, type Settings } from '../api.ts';
 import { Card } from '../components/Card.tsx';
 import { TogglesView } from './TogglesView.tsx';
-import { ConfigView } from './ConfigView.tsx';
 
 const sectionHeading: React.CSSProperties = {
   margin: '20px 0 12px',
@@ -163,13 +162,17 @@ function Field({ spec, settings, onChange }: { spec: FieldSpec; settings: Settin
 
 export function SettingsView() {
   const [settings, setSettings] = useState<Settings>({});
+  const [chain, setChain] = useState<Record<string, unknown> | null>(null);
   const [status, setStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     getSettings()
-      .then((r) => setSettings(r.settings ?? {}))
+      .then((r) => {
+        setSettings(r.settings ?? {});
+        setChain(r.chain ?? null);
+      })
       .catch((e: unknown) => setError(e instanceof Error ? e.message : String(e)));
   }, []);
 
@@ -184,6 +187,7 @@ export function SettingsView() {
     saveSettings(settings)
       .then((r) => {
         setSettings(r.settings ?? {});
+        setChain(r.chain ?? null);
         setStatus('Saved to chain.json — restart shuba (`shuba run`) for it to take effect.');
       })
       .catch((e: unknown) => setError(e instanceof Error ? e.message : String(e)))
@@ -229,8 +233,25 @@ export function SettingsView() {
         </button>
       </div>
 
-      <h3 style={sectionHeading}>Raw config (read-only)</h3>
-      <ConfigView />
+      <h3 style={sectionHeading}>Raw chain.json (read-only)</h3>
+      <Card title="~/.shuba/chain.json">
+        <p style={{ color: 'var(--muted)', fontSize: '12.5px', marginTop: 0 }}>
+          The exact persisted file the form reads and writes. Updates on Save.
+        </p>
+        <pre
+          style={{
+            whiteSpace: 'pre-wrap',
+            background: 'var(--panel-2)',
+            border: '1px solid var(--border)',
+            padding: '10px',
+            borderRadius: '6px',
+            fontSize: '12.5px',
+            margin: 0,
+          }}
+        >
+          {chain ? JSON.stringify(chain, null, 2) : 'loading…'}
+        </pre>
+      </Card>
     </>
   );
 }

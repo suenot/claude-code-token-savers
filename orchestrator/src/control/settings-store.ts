@@ -100,6 +100,12 @@ export function readSettings(path: string = configPath()): Settings {
   return sanitizeSettings(readChain(path));
 }
 
+// readChainRaw returns the whole persisted chain.json (no secrets live there —
+// only envKey names), so the console's raw view matches the form's source.
+export function readChainRaw(path: string = configPath()): Dict {
+  return readChain(path);
+}
+
 // writeSettings merges the sanitized sections into chain.json, leaving unrelated
 // keys (terminal, compressors, ports, toggles, control) untouched.
 export function writeSettings(input: unknown, path: string = configPath()): Settings {

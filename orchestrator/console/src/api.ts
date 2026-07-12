@@ -115,7 +115,7 @@ export function getConfig(): Promise<Record<string, unknown>> {
 }
 
 export type Settings = Record<string, any>;
-export type SettingsResponse = { settings: Settings; restartRequired: boolean };
+export type SettingsResponse = { settings: Settings; chain?: Record<string, unknown>; restartRequired: boolean };
 
 // getSettings / saveSettings edit the whitelisted config sections in chain.json
 // (stage models, thresholds, routes). Changes persist but need a `shuba run`

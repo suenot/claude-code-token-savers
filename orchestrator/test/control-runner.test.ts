@@ -99,6 +99,67 @@ test('createWorktree throws (cwd not a git repo) → job failed (terminal), run(
   assert.match(finished.error ?? '', /not a git repository/);
 });
 
+test('outcome: keep — non-worktree job exits 0', async () => {
+  const store = createStore({ dir: mkdtempSync(join(tmpdir(),'r-')), now: () => 7 });
+  const job = store.create({ id:'', task:'t', harness:'gemini', model:null, cwd:'/r', isolation:'none' } as any);
+  const runner = createRunner({ store, spawnImpl: fakeSpawn('hi\n', 0) as any });
+  await runner.run(store.get(job.id)!);
+  assert.equal(store.get(job.id)!.outcome, 'keep');
+});
+
+test('outcome: keep — worktree job exits 0 with a non-empty diff (removed=false)', async () => {
+  const store = createStore({ dir: mkdtempSync(join(tmpdir(),'r-')), now: () => 7 });
+  const job = store.create({ id:'', task:'t', harness:'gemini', model:null, cwd:'/repo', isolation:'worktree' } as any);
+  const createWorktreeImpl = (() => ({ path: '/repo/.shuba-worktrees/x' })) as any;
+  const finalizeWorktreeImpl = (() => ({ diff: 'diff --git a b', removed: false })) as any;
+  const runner = createRunner({ store, spawnImpl: fakeSpawn('', 0) as any, createWorktreeImpl, finalizeWorktreeImpl });
+  await runner.run(store.get(job.id)!);
+  assert.equal(store.get(job.id)!.outcome, 'keep');
+});
+
+test('outcome: no-change — worktree job exits 0 but diff was empty (removed=true)', async () => {
+  const store = createStore({ dir: mkdtempSync(join(tmpdir(),'r-')), now: () => 7 });
+  const job = store.create({ id:'', task:'t', harness:'gemini', model:null, cwd:'/repo', isolation:'worktree' } as any);
+  const createWorktreeImpl = (() => ({ path: '/repo/.shuba-worktrees/x' })) as any;
+  const finalizeWorktreeImpl = (() => ({ diff: '', removed: true })) as any;
+  const runner = createRunner({ store, spawnImpl: fakeSpawn('', 0) as any, createWorktreeImpl, finalizeWorktreeImpl });
+  await runner.run(store.get(job.id)!);
+  assert.equal(store.get(job.id)!.status, 'done');
+  assert.equal(store.get(job.id)!.outcome, 'no-change');
+});
+
+test('outcome: discard — nonzero exit', async () => {
+  const store = createStore({ dir: mkdtempSync(join(tmpdir(),'r-')), now: () => 7 });
+  const job = store.create({ id:'', task:'t', harness:'gemini', model:null, cwd:'/r', isolation:'none' } as any);
+  const runner = createRunner({ store, spawnImpl: fakeSpawn('', 2) as any });
+  await runner.run(store.get(job.id)!);
+  assert.equal(store.get(job.id)!.outcome, 'discard');
+});
+
+test('outcome: crash — spawn error', async () => {
+  const store = createStore({ dir: mkdtempSync(join(tmpdir(),'r-')), now: () => 7 });
+  const job = store.create({ id:'', task:'t', harness:'gemini', model:null, cwd:'/r', isolation:'none' } as any);
+  const spawnErrorImpl = () => {
+    const child: any = new EventEmitter();
+    child.stdout = Readable.from([]);
+    child.stderr = Readable.from([]);
+    queueMicrotask(() => child.emit('error', new Error('spawn ENOENT')));
+    return child;
+  };
+  const runner = createRunner({ store, spawnImpl: spawnErrorImpl as any });
+  await runner.run(store.get(job.id)!);
+  assert.equal(store.get(job.id)!.outcome, 'crash');
+});
+
+test('outcome: crash — pre-spawn throw (createWorktree throws)', async () => {
+  const store = createStore({ dir: mkdtempSync(join(tmpdir(),'r-')), now: () => 7 });
+  const job = store.create({ id:'', task:'t', harness:'gemini', model:null, cwd:'/not-a-repo', isolation:'worktree' } as any);
+  const createWorktreeImpl = (() => { throw new Error('fatal: not a git repository'); }) as any;
+  const runner = createRunner({ store, spawnImpl: fakeSpawn('', 0) as any, createWorktreeImpl });
+  await runner.run(store.get(job.id)!);
+  assert.equal(store.get(job.id)!.outcome, 'crash');
+});
+
 test('finalizeWorktree throws on close → run() still resolves, job terminal, error logged', async () => {
   const store = createStore({ dir: mkdtempSync(join(tmpdir(), 'r-')), now: () => 7 });
   const job = store.create({

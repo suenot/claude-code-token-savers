@@ -38,15 +38,20 @@ export function createRunner(opts: {
       // Best-effort worktree cleanup, callable from any failure path
       // (close handler, error handler, or a pre-spawn throw below). Never
       // throws itself — a failing finalize is logged, not propagated, so it
-      // can never prevent the job from reaching a terminal status.
-      const finalizeWorktreeSafe = (): void => {
-        if (!worktreePath) return;
+      // can never prevent the job from reaching a terminal status. Returns the
+      // finalize info (removed=true means the diff was empty) so the caller can
+      // classify the outcome; returns undefined when there was no worktree or
+      // finalize threw, both of which we treat as "not removed".
+      const finalizeWorktreeSafe = (): { removed: boolean } | undefined => {
+        if (!worktreePath) return undefined;
         try {
           const { diff, removed } = finalizeWorktreeImpl(job.cwd, worktreePath);
           store.appendLog(job.id, `\n--- worktree diff (removed=${removed}) ---\n${diff}\n`);
+          return { removed };
         } catch (err) {
           const message = err instanceof Error ? err.message : String(err);
           store.appendLog(job.id, `\n--- finalize worktree error ---\n${message}\n`);
+          return undefined;
         }
       };
 
@@ -77,10 +82,20 @@ export function createRunner(opts: {
             // always reached — a failing git op here used to abort the
             // handler before resolve(), leaving the job stuck and the
             // engine slot leaked forever.
-            finalizeWorktreeSafe();
+            const finalized = finalizeWorktreeSafe();
+            // A clean exit whose worktree diff was empty (removed=true)
+            // produced nothing worth keeping — classify it 'no-change' so the
+            // eval loop can tell it apart from a real 'keep'.
+            const outcome =
+              code !== 0
+                ? 'discard'
+                : finalized?.removed
+                  ? 'no-change'
+                  : 'keep';
             store.update(job.id, {
               exitCode: code,
               status: code === 0 ? 'done' : 'failed',
+              outcome,
               endedAt: now(),
             });
             resolve();
@@ -95,6 +110,7 @@ export function createRunner(opts: {
             finalizeWorktreeSafe();
             store.update(job.id, {
               status: 'failed',
+              outcome: 'crash',
               error: err.message,
               endedAt: now(),
             });
@@ -121,6 +137,7 @@ export function createRunner(opts: {
         finalizeWorktreeSafe();
         store.update(job.id, {
           status: 'failed',
+          outcome: 'crash',
           error: message,
           endedAt: now(),
         });

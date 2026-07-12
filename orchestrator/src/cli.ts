@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { loadConfig } from './config.ts';
 import { plan } from './planner.ts';
-import { up } from './supervisor.ts';
+import { up, stageLogDir } from './supervisor.ts';
 import { mintToken } from './router-bootstrap.ts';
 import { runClaude } from './launcher.ts';
 import { REGISTRY } from './registry.ts';
@@ -99,6 +99,7 @@ async function doRun(argv: string[]): Promise<number> {
         ? result.chain.map((s) => `${s.id}:${s.port}`).join(' → ')
         : 'passthrough (no stages, direct to api.anthropic.com)',
     );
+    console.error(`shuba: stage logs → ${stageLogDir()}/<stage>.log`);
     const controlSidecar = result.sidecars.find((s) => s.id === 'control');
     if (controlSidecar) {
       console.error(`shuba: console → http://127.0.0.1:${controlSidecar.port}/`);

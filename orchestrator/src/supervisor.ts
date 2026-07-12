@@ -1,5 +1,37 @@
 import { spawn } from 'node:child_process';
+import { mkdirSync, openSync, statSync, truncateSync } from 'node:fs';
+import { join } from 'node:path';
+import { homedir } from 'node:os';
 import type { ChainHandle, PlannedStage } from './types.ts';
+
+// Stage output goes to per-stage log files, never the terminal: once `shuba
+// run` execs claude, the terminal belongs to Claude Code's UI and any stray
+// stage line corrupts it (statusline garbage, litellm-style spam). Capped so
+// a chatty stage can't fill the disk.
+const LOG_MAX_BYTES = 5_000_000;
+
+export function stageLogDir(): string {
+  return join(homedir(), '.shuba', 'logs');
+}
+
+// Open (append-mode) fd for a stage's log file, truncating oversized ones at
+// startup. Any failure falls back to 'ignore' — logging must never block the
+// chain.
+function openStageLog(id: string): number | 'ignore' {
+  try {
+    const dir = stageLogDir();
+    mkdirSync(dir, { recursive: true });
+    const path = join(dir, `${id}.log`);
+    try {
+      if (statSync(path).size > LOG_MAX_BYTES) truncateSync(path, 0);
+    } catch {
+      // file doesn't exist yet
+    }
+    return openSync(path, 'a');
+  } catch {
+    return 'ignore';
+  }
+}
 
 const defaultSleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
@@ -76,9 +108,10 @@ export async function up(
     // reach Claude) — any stage failing to start/become healthy tears down
     // everything started so far and rethrows, exactly as before.
     for (const stage of chain) {
+      const log = openStageLog(stage.id);
       const child = spawnImpl(stage.spawn.bin, stage.spawn.args, {
         env: { ...process.env, ...stage.spawn.env },
-        stdio: ['ignore', 'inherit', 'inherit'],
+        stdio: ['ignore', log, log],
       });
       started.push({ id: stage.id, port: stage.port, child });
       await waitForHealth(stage.healthUrl, { ...healthOpts, fetchImpl });
@@ -95,9 +128,10 @@ export async function up(
   // still tracked in `started` so `down()` cleans it up later.
   for (const stage of sidecars) {
     try {
+      const log = openStageLog(stage.id);
       const child = spawnImpl(stage.spawn.bin, stage.spawn.args, {
         env: { ...process.env, ...stage.spawn.env },
-        stdio: ['ignore', 'inherit', 'inherit'],
+        stdio: ['ignore', log, log],
       });
       started.push({ id: stage.id, port: stage.port, child });
       await waitForHealth(stage.healthUrl, { ...healthOpts, fetchImpl });

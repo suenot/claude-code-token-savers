@@ -32,19 +32,50 @@ graphify (a native in-process graph) — so one process gives you chaining +
 tasks + graph instead of three disconnected runtimes. The same matrix is
 browsable live in the console's **Compare** tab.
 
-| tool | what it is | runtime | req. compression | chains proxies | cheap-model offload | task queue | knowledge graph | docs review / auto-fix | console |
-|---|---|---|:-:|:-:|:-:|:-:|:-:|:-:|:-:|
-| **shuba** | proxy-chain orchestrator + control MCP | Bun/TS | ~ | ✓ | ✓ | ✓ | ✓ | ✗ | ✓ |
-| [cmdop-claude](https://github.com/markolofsen/cmdop-claude) | self-maintaining `.claude` runtime (~$0.003/cycle, DeepSeek) | Python | ✗ | ✗ | ✓ | ✓ | ✗ | ✓ | ~ |
-| [graphify](https://github.com/safishamsi/graphify) | any input → queryable knowledge graph | Python | ✗ | ✗ | ✓ | ✗ | ✓ | ✗ | ✗ |
-| [claude-code-router](https://github.com/musistudio/claude-code-router) | route requests to alternate providers/models | Node | ~ | ✗ | ✓ | ✗ | ✗ | ✗ | ~ |
-| [LiteLLM](https://github.com/BerriAI/litellm) | generic multi-provider gateway | Python | ~ | ✗ | ✓ | ✗ | ✗ | ✗ | ✓ |
-| [headroom](https://headroom-docs.vercel.app/docs) | content-aware request compression | Python | ✓ | ✗ | ✗ | ✗ | ✗ | ✗ | ~ |
-| [pxpipe](https://github.com/teamchong/pxpipe) | render static request parts to dense PNGs | Node | ✓ | ✗ | ✗ | ✗ | ✗ | ✗ | ✓ |
+Columns are the tools, rows are features. `✓` built-in · `~` partial / via a stage · `◐` planned in shuba · `·` not offered. The same matrix is browsable live in the console's **Compare** tab.
 
-✓ built-in &nbsp;·&nbsp; ~ partial / via a stage &nbsp;·&nbsp; ✗ not offered. Cells reflect each tool's primary design intent, not a benchmark.
+Tools: **shuba** (Bun/TS) · [cmdop-claude](https://github.com/markolofsen/cmdop-claude) (Python) · [graphify](https://github.com/safishamsi/graphify) (Python) · [claude-code-router](https://github.com/musistudio/claude-code-router) (Node) · [LiteLLM](https://github.com/BerriAI/litellm) (Python) · [headroom](https://headroom-docs.vercel.app/docs) (Python) · [pxpipe](https://github.com/teamchong/pxpipe) (Node).
 
-**Pick by need:** want the whole request smaller → **headroom**/**pxpipe** (shuba runs them for you). Want docs kept accurate + auto-fix → **cmdop-claude**. Want to query a repo instead of reading it → **graphify** (shuba embeds a native reader). Want to swap providers → **claude-code-router**/**LiteLLM**. Want them stacked, with a task queue and graph in one process → **shuba**.
+**Request / proxy layer** — shrink input tokens before they hit the API:
+
+| feature | shuba | cmdop | graphify | ccr | litellm | headroom | pxpipe |
+|---|:-:|:-:|:-:|:-:|:-:|:-:|:-:|
+| Content-aware compression (JSON/code/prose) | ~ | · | · | · | · | ✓ | · |
+| Image/PNG request packing | ~ | · | · | · | · | · | ✓ |
+| In-request dedup (identical blocks) | ✓ | · | · | · | · | · | · |
+| `/compact` routed to a cheap model | ✓ | · | · | · | · | · | · |
+| Pre-autocompact context watchdog | ✓ | · | · | · | · | · | · |
+| Response / compression cache | ✓ | · | · | · | ✓ | · | · |
+| Rate limiting | ✓ | · | · | · | ✓ | · | · |
+| Chain proxies behind one `BASE_URL` | ✓ | · | · | · | · | · | · |
+| Provider / model routing | ~ | · | · | ✓ | ✓ | · | · |
+| Cheap-model offload | ✓ | ✓ | ✓ | ✓ | ✓ | · | · |
+
+**Project intelligence / sidecar** — cmdop-claude's core idea: spend cents on a cheap model to keep docs/maps accurate so Claude Code's scarce context isn't spent on it:
+
+| feature | shuba | cmdop | graphify | ccr | litellm | headroom | pxpipe |
+|---|:-:|:-:|:-:|:-:|:-:|:-:|:-:|
+| Task queue injected into prompts | ✓ | ✓ | · | · | · | · | · |
+| Docs review (stale / contradiction / gaps) | ◐ | ✓ | · | · | · | · | · |
+| Docs auto-fix (LLM edits) | ◐ | ✓ | · | · | · | · | · |
+| Project map (dir annotations, SHA-cached) | ◐ | ✓ | · | · | · | · | · |
+| Rules system (lazy `paths:` frontmatter) | · | ✓ | · | · | · | · | · |
+| Docs search (FTS5 / semantic) | · | ✓ | · | · | · | · | · |
+| Knowledge graph (query instead of read) | ✓ | · | ✓ | · | · | · | · |
+| God nodes / community detection | ~ | · | ✓ | · | · | · | · |
+
+**Ops / visibility:**
+
+| feature | shuba | cmdop | graphify | ccr | litellm | headroom | pxpipe |
+|---|:-:|:-:|:-:|:-:|:-:|:-:|:-:|
+| Console / dashboard UI | ✓ | ~ | · | ~ | ✓ | ~ | ✓ |
+| Live savings telemetry | ✓ | · | · | · | · | ~ | ✓ |
+
+Cells reflect each tool's primary design intent, not a benchmark. Not affiliated with any listed project.
+
+**Pick by need:** whole request smaller → **headroom** (content) / **pxpipe** (images), which shuba runs for you. Keep docs accurate + auto-fix, project map, rules → **cmdop-claude** (shuba has the task queue today; docs review is `◐` planned). Query a repo instead of reading it → **graphify** (shuba embeds a native reader). Swap providers → **claude-code-router** / **LiteLLM**. Stack all of it behind one endpoint with a task queue and graph in one process → **shuba**.
+
+> **Docs review / auto-fix is the next thing to port into shuba.** It's *not* the knowledge graph: the graph answers a repo query on demand, whereas cmdop's docs-review is a background sidecar that watches documentation on a cheap model (~$0.003/cycle) and only surfaces findings/edits — so Claude Code's limited context never pays to notice stale docs. Tracked as `◐` above.
 
 ---
 

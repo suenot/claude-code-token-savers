@@ -1,80 +1,147 @@
-import type { ReactNode } from 'react';
+import { Fragment } from 'react';
 import { Card } from '../components/Card.tsx';
 
 // Static comparison — positions shuba against adjacent Claude Code
 // token/runtime tools. No API call: the matrix is authored here so it renders
-// even when no chain is running. Keep in sync with the README comparison table.
+// even when no chain is running. Columns = tools, rows = features (grouped).
+// Keep in sync with the README comparison table.
 
-type Cell = 'yes' | 'no' | 'partial';
+type Cell = 'yes' | 'partial' | 'planned' | 'no';
 
-type Tool = {
-  name: string;
-  what: string; // one-line "what it is"
-  runtime: string;
-  cells: Record<string, Cell>; // capability id -> support
-  self?: boolean; // true for shuba (highlighted row)
-};
+// Column order is fixed; shuba is first and highlighted.
+const TOOLS = [
+  { id: 'shuba', name: 'shuba', runtime: 'Bun/TS', self: true },
+  { id: 'cmdop', name: 'cmdop-claude', runtime: 'Python' },
+  { id: 'graphify', name: 'graphify', runtime: 'Python' },
+  { id: 'ccr', name: 'claude-code-router', runtime: 'Node' },
+  { id: 'litellm', name: 'LiteLLM', runtime: 'Python' },
+  { id: 'headroom', name: 'headroom', runtime: 'Python' },
+  { id: 'pxpipe', name: 'pxpipe', runtime: 'Node' },
+] as const;
 
-const CAPS: { id: string; label: string; hint: string }[] = [
-  { id: 'proxy', label: 'Request compression', hint: 'transforms the outgoing request (proxy in front of the API)' },
-  { id: 'chain', label: 'Chains other proxies', hint: 'layers multiple ANTHROPIC_BASE_URL proxies instead of fighting for the slot' },
-  { id: 'offload', label: 'Cheap-model offload', hint: 'routes some work to a cheaper model (DeepSeek / OpenRouter)' },
-  { id: 'tasks', label: 'Task queue', hint: 'structured tasks injected into the session' },
-  { id: 'graph', label: 'Knowledge graph', hint: 'queryable repo graph instead of full-file reads' },
-  { id: 'docs', label: 'Docs review / auto-fix', hint: 'LLM keeps project docs accurate, generates edits' },
-  { id: 'console', label: 'Console / UI', hint: 'dashboard for live state and savings' },
-];
+type ToolId = (typeof TOOLS)[number]['id'];
+type Row = { feature: string; hint?: string; cells: Partial<Record<ToolId, Cell>> };
+type Section = { title: string; rows: Row[] };
 
-const TOOLS: Tool[] = [
+// Missing cells default to 'no'.
+const SECTIONS: Section[] = [
   {
-    name: 'shuba',
-    what: 'Orchestrator: chains token-saving proxies + control MCP (task queue, native graph, dedup, cache).',
-    runtime: 'Bun / TypeScript',
-    self: true,
-    cells: { proxy: 'partial', chain: 'yes', offload: 'yes', tasks: 'yes', graph: 'yes', docs: 'no', console: 'yes' },
+    title: 'Request / proxy layer (shrink input tokens before they hit the API)',
+    rows: [
+      {
+        feature: 'Content-aware compression',
+        hint: 'compress JSON / code / prose in the request body',
+        cells: { headroom: 'yes', shuba: 'partial' },
+      },
+      {
+        feature: 'Image/PNG request packing',
+        hint: 'render static request parts to dense PNGs (~−59–70% input)',
+        cells: { pxpipe: 'yes', shuba: 'partial' },
+      },
+      {
+        feature: 'In-request dedup',
+        hint: 'drop identical content blocks Claude Code resends each turn',
+        cells: { shuba: 'yes' },
+      },
+      {
+        feature: '/compact routed to cheap model',
+        hint: 'compact-router: send only the summarization request to DeepSeek etc.',
+        cells: { shuba: 'yes' },
+      },
+      {
+        feature: 'Pre-autocompact context watchdog',
+        hint: 'rewrite over-threshold requests before Claude Code autocompacts',
+        cells: { shuba: 'yes' },
+      },
+      {
+        feature: 'Response / compression cache',
+        hint: 'memoize LLM-billed outputs by content hash',
+        cells: { shuba: 'yes', litellm: 'yes' },
+      },
+      { feature: 'Rate limiting', hint: 'pace outbound requests', cells: { shuba: 'yes', litellm: 'yes' } },
+      {
+        feature: 'Chain proxies behind one BASE_URL',
+        hint: 'layer several proxies instead of one owning ANTHROPIC_BASE_URL',
+        cells: { shuba: 'yes' },
+      },
+      {
+        feature: 'Provider / model routing',
+        hint: 'translate to another provider or route by rule',
+        cells: { shuba: 'partial', ccr: 'yes', litellm: 'yes' },
+      },
+      {
+        feature: 'Cheap-model offload',
+        hint: 'send some work to a cheaper model',
+        cells: { shuba: 'yes', cmdop: 'yes', graphify: 'yes', ccr: 'yes', litellm: 'yes' },
+      },
+    ],
   },
   {
-    name: 'cmdop-claude',
-    what: 'Self-maintaining .claude runtime: docs review, project map, task queue, auto-fix (~$0.003/cycle on DeepSeek).',
-    runtime: 'Python',
-    cells: { proxy: 'no', chain: 'no', offload: 'yes', tasks: 'yes', graph: 'no', docs: 'yes', console: 'partial' },
+    title: 'Project intelligence / sidecar (spend cheap tokens so Claude Code spends fewer)',
+    rows: [
+      {
+        feature: 'Task queue injected into prompts',
+        hint: 'structured tasks surfaced into the session',
+        cells: { shuba: 'yes', cmdop: 'yes' },
+      },
+      {
+        feature: 'Docs review (stale / contradiction / gaps)',
+        hint: 'cheap model watches docs so Claude Code does not burn tokens on it',
+        cells: { cmdop: 'yes', shuba: 'planned' },
+      },
+      {
+        feature: 'Docs auto-fix (LLM edits)',
+        hint: 'generate targeted file edits for a finding',
+        cells: { cmdop: 'yes', shuba: 'planned' },
+      },
+      {
+        feature: 'Project map (dir annotations, SHA-cached)',
+        hint: 'one-line description per directory, only changed dirs cost tokens',
+        cells: { cmdop: 'yes', shuba: 'planned' },
+      },
+      {
+        feature: 'Rules system (lazy paths frontmatter)',
+        hint: '.claude/rules/*.md loaded only when relevant files are open',
+        cells: { cmdop: 'yes' },
+      },
+      {
+        feature: 'Docs search (FTS5 / semantic)',
+        hint: 'BM25 + sqlite-vec search over docs, no external service',
+        cells: { cmdop: 'yes' },
+      },
+      {
+        feature: 'Knowledge graph (query instead of read)',
+        hint: 'answer from a repo graph instead of dumping files into context',
+        cells: { graphify: 'yes', shuba: 'yes' },
+      },
+      {
+        feature: 'God nodes / community detection',
+        hint: 'most-connected entities, graph clustering',
+        cells: { graphify: 'yes', shuba: 'partial' },
+      },
+    ],
   },
   {
-    name: 'graphify',
-    what: 'Turns any input into a queryable knowledge graph (god nodes, community detection, path/explain).',
-    runtime: 'Python',
-    cells: { proxy: 'no', chain: 'no', offload: 'yes', tasks: 'no', graph: 'yes', docs: 'no', console: 'no' },
-  },
-  {
-    name: 'claude-code-router',
-    what: 'Routes Claude Code requests to alternate providers/models by rule.',
-    runtime: 'Node',
-    cells: { proxy: 'partial', chain: 'no', offload: 'yes', tasks: 'no', graph: 'no', docs: 'no', console: 'partial' },
-  },
-  {
-    name: 'LiteLLM proxy',
-    what: 'Generic provider gateway (auth, routing, spend) in front of many LLM APIs.',
-    runtime: 'Python',
-    cells: { proxy: 'partial', chain: 'no', offload: 'yes', tasks: 'no', graph: 'no', docs: 'no', console: 'yes' },
-  },
-  {
-    name: 'headroom',
-    what: 'Content-aware compression of request content (JSON/code/prose); reversible cache.',
-    runtime: 'Python',
-    cells: { proxy: 'yes', chain: 'no', offload: 'no', tasks: 'no', graph: 'no', docs: 'no', console: 'partial' },
-  },
-  {
-    name: 'pxpipe',
-    what: 'Renders static request parts to dense PNGs (~−59–70% input tokens).',
-    runtime: 'Node',
-    cells: { proxy: 'yes', chain: 'no', offload: 'no', tasks: 'no', graph: 'no', docs: 'no', console: 'yes' },
+    title: 'Ops / visibility',
+    rows: [
+      {
+        feature: 'Console / dashboard UI',
+        cells: { shuba: 'yes', litellm: 'yes', pxpipe: 'yes', ccr: 'partial', headroom: 'partial', cmdop: 'partial' },
+      },
+      {
+        feature: 'Live savings telemetry',
+        hint: 'measured token savings, not estimates',
+        cells: { shuba: 'yes', pxpipe: 'yes', headroom: 'partial' },
+      },
+    ],
   },
 ];
 
 const MARK: Record<Cell, { text: string; color: string; label: string }> = {
-  yes: { text: '✓', color: '#2ecc71', label: 'yes' },
-  partial: { text: '~', color: '#e0a800', label: 'partial' },
-  no: { text: '✗', color: '#ccc', label: 'no' },
+  yes: { text: '✓', color: '#2ecc71', label: 'built-in' },
+  partial: { text: '~', color: '#e0a800', label: 'partial / via a stage' },
+  planned: { text: '◐', color: '#3498db', label: 'planned in shuba' },
+  no: { text: '·', color: '#ccc', label: 'not offered' },
 };
 
 function Mark({ cell }: { cell: Cell }) {
@@ -86,74 +153,117 @@ function Mark({ cell }: { cell: Cell }) {
   );
 }
 
-const th: React.CSSProperties = {
-  textAlign: 'left',
-  borderBottom: '1px solid #ddd',
-  padding: '6px 8px',
-  fontSize: '0.8em',
-  verticalAlign: 'bottom',
+const cellTd: React.CSSProperties = {
+  padding: '5px 8px',
+  borderBottom: '1px solid #f0f0f0',
+  textAlign: 'center',
+  fontSize: '0.9em',
 };
-const td: React.CSSProperties = { padding: '6px 8px', borderBottom: '1px solid #f0f0f0', fontSize: '0.85em' };
-
-function Legend(): ReactNode {
-  return (
-    <p style={{ fontSize: '0.8em', color: '#666', marginTop: '12px' }}>
-      <Mark cell="yes" /> built-in &nbsp; <Mark cell="partial" /> partial / via a stage &nbsp; <Mark cell="no" /> not offered
-    </p>
-  );
-}
+const featTd: React.CSSProperties = {
+  padding: '5px 8px',
+  borderBottom: '1px solid #f0f0f0',
+  fontSize: '0.82em',
+  whiteSpace: 'nowrap',
+};
 
 export function CompareView() {
   return (
     <>
-      <Card title="shuba vs adjacent tools">
+      <Card title="shuba vs adjacent tools — feature matrix">
         <p style={{ fontSize: '0.85em', color: '#555', marginTop: 0 }}>
-          shuba is the <em>orchestrator</em>: it layers the single-purpose compressors (headroom, pxpipe) behind one{' '}
-          <code>ANTHROPIC_BASE_URL</code>, and folds in a control MCP that ports the best ideas from cmdop-claude (task
-          queue) and graphify (native in-process graph) — so one process gives you chaining + tasks + graph instead of
-          three disconnected runtimes.
+          Columns are tools, rows are features. shuba is the <em>orchestrator</em>: it layers the single-purpose
+          proxies (headroom, pxpipe) behind one <code>ANTHROPIC_BASE_URL</code> and adds a control MCP that ports
+          cmdop-claude's task queue and graphify's native graph. The <strong>Project intelligence</strong> block is
+          cmdop-claude's core idea — spend cents on a cheap model to keep docs/maps accurate so Claude Code's scarce
+          context is not spent on it; <Mark cell="planned" /> marks that landing in shuba next.
         </p>
         <div style={{ overflowX: 'auto' }}>
-          <table style={{ borderCollapse: 'collapse', width: '100%', minWidth: '640px' }}>
+          <table style={{ borderCollapse: 'collapse', width: '100%', minWidth: '760px' }}>
             <thead>
               <tr>
-                <th style={th}>tool</th>
-                <th style={th}>runtime</th>
-                {CAPS.map((c) => (
-                  <th key={c.id} style={th} title={c.hint}>
-                    {c.label}
+                <th style={{ ...featTd, textAlign: 'left', borderBottom: '2px solid #ccc' }}>feature</th>
+                {TOOLS.map((t) => (
+                  <th
+                    key={t.id}
+                    style={{
+                      ...cellTd,
+                      borderBottom: '2px solid #ccc',
+                      fontSize: '0.78em',
+                      background: (('self' in t) && t.self) ? '#eafff2' : undefined,
+                    }}
+                    title={t.runtime}
+                  >
+                    {t.name}
+                    <div style={{ fontWeight: 400, color: '#999', fontSize: '0.9em' }}>{t.runtime}</div>
                   </th>
                 ))}
               </tr>
             </thead>
             <tbody>
-              {TOOLS.map((t) => (
-                <tr key={t.name} style={t.self ? { background: '#eafff2' } : undefined}>
-                  <td style={{ ...td, fontWeight: t.self ? 700 : 400 }}>{t.name}</td>
-                  <td style={{ ...td, color: '#666' }}>{t.runtime}</td>
-                  {CAPS.map((c) => (
-                    <td key={c.id} style={{ ...td, textAlign: 'center' }}>
-                      <Mark cell={t.cells[c.id]} />
+              {SECTIONS.map((section) => (
+                <Fragment key={section.title}>
+                  <tr>
+                    <td
+                      colSpan={TOOLS.length + 1}
+                      style={{
+                        padding: '8px',
+                        fontSize: '0.78em',
+                        fontWeight: 700,
+                        color: '#444',
+                        background: '#f7f7f7',
+                        borderBottom: '1px solid #e0e0e0',
+                      }}
+                    >
+                      {section.title}
                     </td>
+                  </tr>
+                  {section.rows.map((row) => (
+                    <tr key={row.feature}>
+                      <td style={featTd} title={row.hint}>
+                        {row.feature}
+                        {row.hint && <span style={{ color: '#bbb' }}> ⓘ</span>}
+                      </td>
+                      {TOOLS.map((t) => (
+                        <td key={t.id} style={{ ...cellTd, background: (('self' in t) && t.self) ? '#eafff2' : undefined }}>
+                          <Mark cell={row.cells[t.id] ?? 'no'} />
+                        </td>
+                      ))}
+                    </tr>
                   ))}
-                </tr>
+                </Fragment>
               ))}
             </tbody>
           </table>
         </div>
-        <Legend />
+        <p style={{ fontSize: '0.8em', color: '#666', marginTop: '12px' }}>
+          <Mark cell="yes" /> built-in &nbsp;·&nbsp; <Mark cell="partial" /> partial / via a stage &nbsp;·&nbsp;{' '}
+          <Mark cell="planned" /> planned in shuba &nbsp;·&nbsp; <Mark cell="no" /> not offered. Hover a feature (ⓘ) for
+          detail. Cells reflect each tool's primary design intent, not a benchmark.
+        </p>
       </Card>
 
-      <Card title="What each is for">
-        <ul style={{ margin: 0, paddingLeft: '18px', fontSize: '0.85em', lineHeight: 1.5 }}>
-          {TOOLS.map((t) => (
-            <li key={t.name} style={{ marginBottom: '6px' }}>
-              <strong>{t.name}</strong> — {t.what}
-            </li>
-          ))}
+      <Card title="Pick by need">
+        <ul style={{ margin: 0, paddingLeft: '18px', fontSize: '0.85em', lineHeight: 1.55 }}>
+          <li>
+            Whole request smaller → <strong>headroom</strong> (content) / <strong>pxpipe</strong> (images) — shuba runs
+            them for you.
+          </li>
+          <li>
+            Keep docs accurate + auto-fix, project map, rules → <strong>cmdop-claude</strong> (shuba: task queue today,
+            docs review <Mark cell="planned" /> next).
+          </li>
+          <li>
+            Query a repo instead of reading it → <strong>graphify</strong> (shuba embeds a native reader).
+          </li>
+          <li>
+            Swap providers / route by model → <strong>claude-code-router</strong> / <strong>LiteLLM</strong>.
+          </li>
+          <li>
+            Stack all of the above behind one endpoint, with a task queue + graph in one process → <strong>shuba</strong>.
+          </li>
         </ul>
         <p style={{ fontSize: '0.8em', color: '#888', marginTop: '12px', marginBottom: 0 }}>
-          Not affiliated with any listed project. Cells reflect each tool's primary design intent, not a benchmark.
+          Not affiliated with any listed project.
         </p>
       </Card>
     </>

@@ -42,6 +42,7 @@ export type Config = {
     thresholdTokens?: number; tailTurns?: number;
   };
   rateLimiter?: { rps?: number; burst?: number; cooldownMs?: number };
+  crush?: { threshold?: number; budget?: number; enabled?: boolean };
   imageShrink?: { scale?: number | string; minBytes?: number };
   modelRouter?: {
     routes?: {

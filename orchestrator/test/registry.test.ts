@@ -69,6 +69,37 @@ test('context-watchdog applies defaults when config omits the block', () => {
   assert.equal(env.WATCHDOG_TAIL_TURNS, '6');
 });
 
+test('crush is a builtin node stage wired from config', () => {
+  const d = REGISTRY.crush;
+  assert.equal(d.builtin, true);
+  assert.equal(d.terminal, false);
+  assert.equal(d.healthPath, '/health');
+  assert.equal(d.bin, process.execPath);
+  const { args, env } = d.build({
+    port: 47855, upstreamBase: 'http://127.0.0.1:8787',
+    config: { crush: { threshold: 3000, budget: 1500 } } as Config,
+  });
+  assert.match(args[0], /bin\/crush\.ts$/);
+  assert.equal(env.PORT, '47855');
+  assert.equal(env.CRUSH_UPSTREAM, 'http://127.0.0.1:8787');
+  assert.equal(env.CRUSH_THRESHOLD, '3000');
+  assert.equal(env.CRUSH_BUDGET, '1500');
+  assert.equal(env.CRUSH_ENABLED, undefined); // enabled by default, no override emitted
+});
+
+test('crush omits threshold/budget env when config omits them (server defaults apply)', () => {
+  const { env } = REGISTRY.crush.build({ port: 47855, upstreamBase: 'http://x' });
+  assert.equal(env.CRUSH_THRESHOLD, undefined);
+  assert.equal(env.CRUSH_BUDGET, undefined);
+});
+
+test('crush emits CRUSH_ENABLED=false when disabled in config', () => {
+  const { env } = REGISTRY.crush.build({
+    port: 47855, upstreamBase: 'http://x', config: { crush: { enabled: false } } as Config,
+  });
+  assert.equal(env.CRUSH_ENABLED, 'false');
+});
+
 test('control descriptor is a builtin node sidecar wired from delegate config', () => {
   const d = REGISTRY.control;
   assert.equal(d.builtin, true);

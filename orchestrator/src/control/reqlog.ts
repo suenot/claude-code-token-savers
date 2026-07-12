@@ -186,9 +186,11 @@ export function readSavings(opts?: { path?: string; limit?: number; maxBytes?: n
 export const FUNNEL_STAGE_ORDER = [
   'compact-router',
   'context-watchdog',
+  'crush',
   'dedup',
   'image-shrink',
   'model-router',
+  'thinking-damper',
   'rate-limiter',
 ] as const;
 

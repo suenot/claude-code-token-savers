@@ -112,6 +112,7 @@ function isLoopbackOrigin(origin: string): boolean {
 const KNOWN_STAGES = [
   'compact-router',
   'context-watchdog',
+  'crush',
   'dedup',
   'headroom',
   'image-shrink',
@@ -122,6 +123,7 @@ type KnownStage = (typeof KNOWN_STAGES)[number];
 const LIVE_STAGES = new Set<string>([
   'compact-router',
   'context-watchdog',
+  'crush',
   'dedup',
   'image-shrink',
   'model-router',

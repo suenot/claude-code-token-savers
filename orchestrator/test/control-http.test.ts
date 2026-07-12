@@ -491,11 +491,13 @@ test('GET /api/toggles returns all known stages with correct live/restartRequire
     const body: any = await res.json();
     assert.deepEqual(
       body.map((s: any) => s.id).sort(),
-      ['compact-router', 'context-watchdog', 'dedup', 'headroom', 'image-shrink', 'model-router', 'rate-limiter'],
+      ['compact-router', 'context-watchdog', 'crush', 'dedup', 'headroom', 'image-shrink', 'model-router', 'rate-limiter'],
     );
     const byId = Object.fromEntries(body.map((s: any) => [s.id, s]));
     assert.equal(byId['compact-router'].live, true);
     assert.equal(byId['compact-router'].restartRequired, false);
+    assert.equal(byId['crush'].live, true);
+    assert.equal(byId['crush'].restartRequired, false);
     assert.equal(byId['context-watchdog'].live, true);
     assert.equal(byId['context-watchdog'].restartRequired, false);
     assert.equal(byId['dedup'].live, true);

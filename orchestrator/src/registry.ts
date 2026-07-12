@@ -6,6 +6,7 @@ const COMPACT_BIN = fileURLToPath(new URL('../bin/compact-interceptor.ts', impor
 const WATCHDOG_BIN = fileURLToPath(new URL('../bin/context-watchdog.ts', import.meta.url));
 const RATELIMIT_BIN = fileURLToPath(new URL('../bin/rate-limiter.ts', import.meta.url));
 const DEDUP_BIN = fileURLToPath(new URL('../bin/dedup.ts', import.meta.url));
+const CRUSH_BIN = fileURLToPath(new URL('../bin/crush.ts', import.meta.url));
 const IMAGE_BIN = fileURLToPath(new URL('../bin/shuba-image-shrink.ts', import.meta.url));
 const ROUTER_BIN = fileURLToPath(new URL('../bin/shuba-model-router.ts', import.meta.url));
 const CONTROL_BIN = fileURLToPath(new URL('../bin/shuba-control.ts', import.meta.url));
@@ -124,6 +125,26 @@ export const REGISTRY: Record<string, StageDescriptor> = {
           DEDUP_UPSTREAM: upstreamBase as string,
         },
       };
+    },
+  },
+  crush: {
+    id: 'crush',
+    builtin: true,
+    bin: process.execPath,
+    defaultPort: 47855,
+    dialect: 'anthropic',
+    terminal: false,
+    healthPath: '/health',
+    build({ port, upstreamBase, config }: BuildContext): BuildResult {
+      const c = (config && config.crush) || {};
+      const env: Record<string, string> = {
+        PORT: String(port),
+        CRUSH_UPSTREAM: upstreamBase as string,
+      };
+      if (c.threshold !== undefined) env.CRUSH_THRESHOLD = String(c.threshold);
+      if (c.budget !== undefined) env.CRUSH_BUDGET = String(c.budget);
+      if (c.enabled === false) env.CRUSH_ENABLED = 'false';
+      return { args: [CRUSH_BIN], env };
     },
   },
   'image-shrink': {

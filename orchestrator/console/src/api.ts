@@ -167,6 +167,63 @@ export function setToggle(stage: string, enabled: boolean): Promise<ToggleRow[]>
   return postJson<ToggleRow[]>('/api/toggles', { stage, enabled });
 }
 
+// ---- capabilities (shuba's takeover of Claude Code skills/agents/mcp/plugins) ----
+
+export type CapabilityType = 'skill' | 'agent' | 'mcp' | 'plugin';
+
+export type Capability = {
+  id: string;
+  type: CapabilityType;
+  name: string;
+  description: string;
+  sourcePath: string;
+  enabled: boolean;
+  importedAt: string;
+};
+
+// A capability still living in Claude Code (found by a scan but not yet
+// imported into shuba). Same shape the verify.leftovers array uses.
+export type CapabilityLeftover = {
+  type: CapabilityType;
+  name: string;
+  sourcePath: string;
+};
+
+export type CapabilitiesResponse = {
+  manifest: Capability[];
+  verify: { clean: boolean; leftovers: CapabilityLeftover[] };
+};
+
+// getCapabilities returns shuba's imported capability manifest plus a verify
+// block reporting anything still left behind in Claude Code (GET /api/capabilities).
+export function getCapabilities(): Promise<CapabilitiesResponse> {
+  return getJson<CapabilitiesResponse>('/api/capabilities');
+}
+
+// scanCapabilities re-scans Claude Code for capabilities not yet taken over
+// (POST /api/capabilities/scan). Returns the found leftovers.
+export function scanCapabilities(): Promise<{ leftovers: CapabilityLeftover[] }> {
+  return postJson<{ leftovers: CapabilityLeftover[] }>('/api/capabilities/scan', {});
+}
+
+// importCapabilities moves capabilities from Claude Code into shuba. Omit id to
+// take over everything found; pass an id to import one (POST /api/capabilities/import).
+export function importCapabilities(id?: string): Promise<CapabilitiesResponse> {
+  return postJson<CapabilitiesResponse>('/api/capabilities/import', id ? { id } : {});
+}
+
+// ejectCapability restores a single capability back to Claude Code
+// (POST /api/capabilities/eject).
+export function ejectCapability(id: string): Promise<CapabilitiesResponse> {
+  return postJson<CapabilitiesResponse>('/api/capabilities/eject', { id });
+}
+
+// toggleCapability flips a single capability's enabled flag
+// (POST /api/capabilities/toggle).
+export function toggleCapability(id: string, enabled: boolean): Promise<CapabilitiesResponse> {
+  return postJson<CapabilitiesResponse>('/api/capabilities/toggle', { id, enabled });
+}
+
 // openLogStream opens a WebSocket against /api/stream/logs/:id and invokes
 // onChunk for every text frame received. Returns a close function. Relies on
 // browser globals (WebSocket, location) that are absent under `bun test` —

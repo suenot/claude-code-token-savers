@@ -16,6 +16,7 @@ import {
   Columns2,
   Snowflake,
   Filter,
+  Puzzle,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -32,6 +33,7 @@ const ICONS: Record<string, LucideIcon> = {
   graph: Share2,
   compare: Columns2,
   funnel: Filter,
+  capabilities: Puzzle,
   logo: Snowflake,
 };
 

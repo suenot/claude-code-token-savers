@@ -11,6 +11,7 @@ import { FunnelView } from './views/FunnelView.tsx';
 import { RequestFeedView } from './views/RequestFeedView.tsx';
 import { MonitorsView } from './views/MonitorsView.tsx';
 import { CompareView } from './views/CompareView.tsx';
+import { CapabilitiesView } from './views/CapabilitiesView.tsx';
 import { SettingsView } from './views/SettingsView.tsx';
 
 type Tab = {
@@ -49,6 +50,7 @@ const GROUPS: Group[] = [
     tabs: [
       { id: 'jobs', label: 'Jobs', icon: 'jobs', title: 'Jobs', sub: 'Tasks delegated to coding harnesses and their results.', render: () => <JobsView /> },
       { id: 'harnesses', label: 'Harnesses', icon: 'harness', title: 'Harnesses', sub: 'Installed coding harnesses shuba can delegate to.', render: () => <HarnessView /> },
+      { id: 'capabilities', label: 'Capabilities', icon: 'capabilities', title: 'Capabilities', sub: 'Skills, agents, MCP servers and plugins shuba has taken over from Claude Code.', render: () => <CapabilitiesView /> },
       { id: 'graph', label: 'Graph', icon: 'graph', title: 'Graph', sub: 'Query the repo knowledge graph instead of reading files.', render: () => <GraphView /> },
     ],
   },

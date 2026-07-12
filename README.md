@@ -175,6 +175,32 @@ All take effect on the next Claude Code restart.
 
 **headroom is a proxy, not a hook** — it sits between Claude Code and the API via `headroom wrap claude`, so it doesn't appear in the hook map. Run it in front; the hook-based tools above stack on top independently.
 
+## Inspired by / prior art
+
+shuba's orchestrator ports the best ideas from several projects — credit where due:
+
+- **[cmdop-claude](https://github.com/markolofsen/cmdop-claude)** — the sidecar idea:
+  spend cents on a cheap model to keep a task queue, docs review, and project map
+  accurate so Claude Code's scarce context isn't spent on it. shuba folds the task
+  queue in natively (`src/control/tasks.ts`); docs review / project map are planned.
+- **[graphify](https://github.com/safishamsi/graphify)** — a queryable knowledge graph
+  in place of "read the whole repo." shuba carries a native in-process graph
+  (`src/control/graph.ts`, `src/graph/*`) instead of a separate runtime.
+- **[claude-code-router](https://github.com/musistudio/claude-code-router)** — provider /
+  model routing behind one `ANTHROPIC_BASE_URL`. shuba's classifier + chain
+  (`src/control/classifier.ts`, `src/router/*`) generalize it into a layered chain.
+- **[headroom](https://headroom-docs.vercel.app/docs)** — content-aware request
+  compression, one of the layers shuba chains.
+- **[link-assistant/router](https://github.com/link-assistant/router)** — Anthropic
+  Messages ↔ other-provider translation, the outermost chain layer.
+- **Meta-Harness** ([paper](https://arxiv.org/abs/2603.28052),
+  [metaharness lib](https://superagenticai.github.io/metaharness/)) — the framing that
+  the *harness* (instructions, scripts, validation, routing), not just the prompt, is
+  the thing to optimize: propose → validate → evaluate → keep, with write-scope
+  enforcement and explicit outcome classification. shuba already has the run/isolate/
+  diff half (`src/control/runner.ts`, `worktree.ts`); the eval/keep half is the north
+  star it points shuba toward.
+
 ## License
 
 MIT — see [LICENSE](LICENSE). Not affiliated with Anthropic, rtk, caveman, graphify, or headroom; this just wires existing OSS tools together.

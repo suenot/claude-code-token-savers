@@ -4,8 +4,27 @@
 // image untouched (the whole request must still go through), so a corrupt or
 // exotic image can never break the response path.
 
-import sharp from 'sharp';
 import { resolveScale } from './presets.ts';
+
+// sharp is a native addon and cannot load from inside the compiled binary's
+// virtual $bunfs — a static import would crash the whole stage at startup.
+// Load it lazily and treat "unavailable" as a soft mode: every image passes
+// through untouched (the stage still runs; OCR/vision routing don't need it).
+// undefined = not attempted yet, null = tried and unavailable.
+let sharpModule: typeof import('sharp').default | null | undefined;
+async function loadSharp(): Promise<typeof import('sharp').default | null> {
+  if (sharpModule !== undefined) return sharpModule;
+  try {
+    sharpModule = (await import('sharp')).default;
+  } catch (err) {
+    sharpModule = null;
+    const message = err instanceof Error ? err.message.split('\n')[0] : String(err);
+    process.stderr.write(
+      `[image-shrink] sharp unavailable (${message}) — images pass through un-resized\n`,
+    );
+  }
+  return sharpModule;
+}
 
 // Anthropic bills images at roughly (width * height) / 750 tokens. Used only
 // for savings telemetry, not for any request decision.
@@ -42,6 +61,9 @@ async function shrinkOne(
 
   const inputBytes = Buffer.byteLength(source.data, 'base64');
   if (inputBytes < minBytes) return null;
+
+  const sharp = await loadSharp();
+  if (!sharp) return null;
 
   const buf = Buffer.from(source.data, 'base64');
   const meta = await sharp(buf).metadata();
